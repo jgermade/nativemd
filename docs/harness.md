@@ -90,6 +90,18 @@ The hello suites cover `VInt` and `HInt` (interrupt handlers, `--irq`) and `Read
 register ABI: result in `d0`). A deliberately wrong C (`HELLO_BUG`) must make the suite
 fail; that test guards against a harness that always passes.
 
+## Fuzzing
+
+Captured states show what a routine really receives while playing, but often only a few
+distinct inputs (Sonic 1's `CalcSine` saw 2 angles of 256 in 1500 frames). `nmd-statefuzz`
+derives states from a captured one: `--sweep FIELD=LO-HI` (exhaustive), `--rand FIELD=LO-HI`
+(uniform, reproducible with `--seed`), `--value FIELD=V`. FIELD is a register part
+(`d0.b`, `d1.w`, `a0.l`) or a RAM location (`FFF636.l`); only that part changes.
+
+Random states are not enough on their own: on Sonic 1's `CalcAngle` a deliberate bug at
+the `-$8000` edge passed 2000 random states and failed hand-picked edge cases (zeros, equal
+magnitudes, sign boundaries). Suites should combine captured, swept, random and edge states.
+
 ## Side-effect read replay
 
 `nmd_replay_open(trace)`: while active, every read the C makes from a device
@@ -152,6 +164,6 @@ single routine (`VInt`) gives the same trace from the same captured state.
 | Per-routine suite runner (in-process) | done |
 | Side-effect read replay | done |
 | Hybrid execution, both directions, idle loop | done |
-| Fuzzing captured states within valid ranges | to do |
+| Fuzzing captured states within valid ranges (`nmd-statefuzz`) | done |
 | Scripted input for captures in hybrid runs | to do |
 | Z80 in the oracle | to do |

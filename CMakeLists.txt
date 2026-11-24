@@ -91,6 +91,10 @@ add_executable(nmd-statediff tools/statediff.c)
 target_link_libraries(nmd-statediff PRIVATE nmd_compare)
 target_compile_options(nmd-statediff PRIVATE ${NMD_WARNINGS})
 
+add_executable(nmd-statefuzz tools/statefuzz.c)
+target_link_libraries(nmd-statefuzz PRIVATE nativemd)
+target_compile_options(nmd-statefuzz PRIVATE ${NMD_WARNINGS})
+
 add_executable(nmd-disasm tools/disasm.c)
 target_link_libraries(nmd-disasm PRIVATE nativemd musashi_dasm)
 target_compile_options(nmd-disasm PRIVATE ${NMD_WARNINGS})
@@ -183,6 +187,19 @@ if(NMD_BUILD_TESTS)
         COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call VInt --irq --replay ${VINT_STATES})
     add_test(NAME hello_suite_hint
         COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call HInt --irq ${HINT_STATES})
+    # Fuzzed states: HInt with every value of its counter's low byte.
+    set(FUZZ ${OUT}/hello_fuzz)
+    file(MAKE_DIRECTORY ${FUZZ})
+    add_test(NAME hello_fuzz
+        COMMAND nmd-statefuzz ${STATES}/HInt.0000.nmds --out ${FUZZ} --name HInt
+                --sweep FF0005.b=0-FF --rand FF0004.b=0-FF --rand d0=0-FFFFFFFF --seed 3)
+    add_test(NAME hello_suite_hint_fuzz
+        COMMAND ${CMAKE_COMMAND} -DSUITE=$<TARGET_FILE:hello_suite> -DROM=${HELLO_ROM}
+                -DSYM=${HELLO_SYM} -DROUTINE=HInt -DGLOB=${FUZZ}/HInt.*.nmds
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_suite_glob.cmake)
+    set_tests_properties(hello_fuzz PROPERTIES DEPENDS hello_capture)
+    set_tests_properties(hello_suite_hint_fuzz PROPERTIES DEPENDS hello_fuzz)
+
     # A routine with a register ABI: d0 is compared too.
     add_test(NAME hello_suite_readpad
         COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call ReadPad --regs d0 ${PAD_STATES})

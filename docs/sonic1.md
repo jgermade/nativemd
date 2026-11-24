@@ -49,3 +49,16 @@ is the oracle's only lag frame (see below).
   main code, so it never lags (by design, see the contract). The full-run oracle comparison
   therefore stops at the first lag frame; per-routine suites are unaffected, and full-run
   checks of C work best against hybrid runs (both on the engine's timing).
+
+## First routines in C (2026-11-24)
+
+`RandomNumber` ($29AC), `CalcSine` ($29D2) and `CalcAngle` ($2C6A), each with an ABI wrapper
+reproducing the original register interface (which parts of d0/d1 change, preserved d3/d4,
+CCR where it is cheap). The C lives outside this repository (it is derived from the game).
+
+| Check | Result |
+|---|---|
+| Suites on captured states (1500 frames, demo) | 2 + 64 + 64 pass |
+| Suites on fuzzed states | `RandomNumber` 500/500 (random seeds), `CalcSine` 256/256 (every angle), `CalcAngle` 2000/2000 random + 15/15 edge cases |
+| Mutation checks | an equivalent mutation (`<` vs `<=` at equal magnitudes) survives, as it should; an edge-only bug at `-$8000` passes random states and fails edge cases |
+| Hybrid with these 3 in C vs hybrid with none, 1500 frames | traces identical over 3 368 172 accesses (1015 calls into C), final states equal |
