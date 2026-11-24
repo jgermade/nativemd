@@ -446,7 +446,9 @@ bool oracle_run_frames(uint64_t frames)
     sample_pads(0);
     uint64_t mclk_done = 0, cycles_done = 0;
     for (uint64_t frame = 0; pending_action != ACT_RETURNED; frame++) {
-        if (frame > frames + 2) {
+        /* Games run long stretches with VINT masked (checksums, decompression):
+         * allow a generous number of video frames per requested VINT. */
+        if (frame > frames * 4 + 600) {
             fprintf(stderr, "oracle: %llu VINTs taken after %llu frames (VINT disabled?)\n",
                     (unsigned long long)vint_count, (unsigned long long)frame);
             return false;

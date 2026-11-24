@@ -79,6 +79,10 @@ add_executable(nmd-oracle harness/oracle/oracle_main.c)
 target_link_libraries(nmd-oracle PRIVATE nmd_harness)
 target_compile_options(nmd-oracle PRIVATE ${NMD_WARNINGS})
 
+add_executable(nmd-hybrid harness/hybrid_main.c)
+target_link_libraries(nmd-hybrid PRIVATE nmd_harness)
+target_compile_options(nmd-hybrid PRIVATE ${NMD_WARNINGS})
+
 add_executable(nmd-tracediff tools/tracediff.c)
 target_link_libraries(nmd-tracediff PRIVATE nmd_compare)
 target_compile_options(nmd-tracediff PRIVATE ${NMD_WARNINGS})

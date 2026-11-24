@@ -100,9 +100,12 @@ bool nmd_game_finished(void)        { return NMD.finished; }
 /* Interrupts                                                                */
 /* ------------------------------------------------------------------------ */
 
-static void take_interrupt(unsigned level, uint32_t vector)
+/* Returns false if the interrupt is masked (it then stays pending). */
+static bool take_interrupt(unsigned level, uint32_t vector)
 {
-    if (((M68K.sr & M68K_SR_IMASK) >> 8) >= level) return; /* masked */
+    if (((M68K.sr & M68K_SR_IMASK) >> 8) >= level) return false;
+    /* The acknowledge cycle clears the VDP's VINT flag before the handler runs. */
+    if (level == 6) vdp_vint_ack();
     uint32_t handler = be32(NMD.rom + vector) & 0xFFFFFF;
     nmd_routine_fn fn = find_routine(handler);
 
@@ -114,9 +117,10 @@ static void take_interrupt(unsigned level, uint32_t vector)
         nmd_fatal("interrupt level %u: no C for handler %06X (vector %03X)", level, handler, vector);
     if (nmd_trace_enabled()) nmd_trace_comment("rte %u", level);
     M68K = saved;
+    return true;
 }
 
-static void hint_dispatch(void) { take_interrupt(4, HW_VEC_HINT); }
+static void hint_dispatch(void) { (void)take_interrupt(4, HW_VEC_HINT); }
 
 /* ------------------------------------------------------------------------ */
 /* Scheduler                                                                 */
@@ -158,10 +162,13 @@ static void run_one_frame(void)
 
     /* Active display, then VBlank. */
     vdp_frame(hint_dispatch);
-    if (vdp_vint_enabled()) {
-        take_interrupt(6, HW_VEC_VINT);
-        vdp_vint_ack();
-    }
+    /*
+     * A masked VINT stays pending (status bit F stays set) and is taken at the
+     * next frame's VBlank if unmasked then. The hardware would take it as soon
+     * as the mask is lowered; that is timing the contract does not model.
+     */
+    if (vdp_vint_enabled()) (void)take_interrupt(6, HW_VEC_VINT);
+    else vdp_vint_ack();
     for (size_t i = 0; i < NMD.chip_count; i++)
         if (NMD.chips[i].frame) NMD.chips[i].frame(NMD.chips[i].user);
 
