@@ -5,13 +5,16 @@
 #define HELLO_ROM_SIZE      0x1000u
 #define HELLO_INITIAL_SSP   0x00FFFE00u
 
+/* Code (hello.s; encoded by mkhello) */
 #define HELLO_ADDR_MAIN     0x000200u
-#define HELLO_ADDR_HINT     0x000300u
-#define HELLO_ADDR_VINT     0x000320u
-#define HELLO_ADDR_ERROR    0x000340u
+#define HELLO_ADDR_HINT     0x000400u
+#define HELLO_ADDR_VINT     0x000420u /* ReadPad follows it */
+#define HELLO_ADDR_ERROR    0x000480u
+#define HELLO_CODE_END      0x000500u
 
-#define HELLO_ADDR_PALETTE  0x000400u /* 16 words */
-#define HELLO_ADDR_MESSAGE  0x000420u /* NUL-terminated ASCII */
+/* Data */
+#define HELLO_ADDR_PALETTE  0x000600u /* 16 words */
+#define HELLO_ADDR_MESSAGE  0x000620u /* NUL-terminated ASCII */
 #define HELLO_MESSAGE       "HELLO, WORLD"
 
 /* Work RAM */

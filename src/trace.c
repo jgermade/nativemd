@@ -8,12 +8,30 @@
 
 static FILE *trace_file;
 
+/* Poll collapsing (docs/trace-format.md, "Poll reads"). */
+static bool          poll_active, poll_have_last;
+static nmd_trace_line poll_last;
+
+void nmd_trace_poll_begin(void) { poll_active = true; poll_have_last = false; }
+void nmd_trace_poll_pause(void) { poll_active = false; }
+void nmd_trace_poll_resume(void) { poll_active = true; }
+void nmd_trace_poll_end(void)   { poll_active = false; poll_have_last = false; }
+
 void nmd_trace_open(FILE *f) { trace_file = f; }
 bool nmd_trace_enabled(void) { return trace_file != NULL; }
 
 void nmd_trace_access(nmd_trace_bus bus, bool write, unsigned bits, uint32_t addr, uint32_t value)
 {
     if (!trace_file) return;
+    if (poll_active && !write) {
+        if (poll_have_last && poll_last.bus == bus && poll_last.bits == bits &&
+            poll_last.addr == addr && poll_last.value == value) return;
+        poll_last.bus = bus;
+        poll_last.bits = bits;
+        poll_last.addr = addr;
+        poll_last.value = value;
+        poll_have_last = true;
+    }
     const char *prefix = bus == NMD_TRACE_Z80 ? "Z" : "";
     const char *arrow  = write ? "<-" : "->";
     if (bus == NMD_TRACE_Z80)

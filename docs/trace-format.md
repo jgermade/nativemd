@@ -24,6 +24,16 @@ ZW8 4001 <- 2B          Z80 write
   dispatches, `irq`/`rte` around interrupt handlers and `fatal` before aborting. They help
   humans; comparison ignores them, because the oracle does not produce the same ones.
 
+## Poll reads
+
+A busy-wait loop in the original (`tst.b flag / bne.s loop`) reads the same value many
+times; its C form, `wait_until(cond)`, reads it once per frame. Both sides collapse
+repeated identical reads of one wait into one line:
+
+- engine: reads made by a `wait_until` condition are traced only when they differ from the
+  previous read of the same wait (interrupt handlers in between are traced normally);
+- oracle: the same rule for reads made inside the loop declared with `--idle`.
+
 ## Comparing
 
 `nmd-tracediff EXPECTED ACTUAL` compares two traces access by access and prints the first

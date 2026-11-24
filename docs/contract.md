@@ -44,7 +44,8 @@ repository ships ROMs or game assets.
 - **Prefetch** is not modelled. Self-modifying code that depends on prefetch must be
   rewritten by hand.
 - **Instructions with special bus behaviour**:
-  - `CLR` reads before it writes: `m68k_clr8/16/32`.
+  - `CLR` reads before it writes: `m68k_clr8/16/32`. (Musashi omits this read; the oracle
+    adds it.)
   - `TAS` performs a locked read-modify-write; on the Mega Drive the write-back does not
     reach memory. `m68k_tas` performs only the read. *(To verify.)*
   - Other read-modify-write instructions to memory (`ADDQ`, `SUBQ`, `OR`, `AND`, `EOR`,
@@ -85,10 +86,15 @@ repository ships ROMs or game assets.
   restored around them and the interrupt mask raised, like the 68000's exception entry
   and `RTE`.
 - Busy-wait loops on state changed by interrupts or hardware (a flag cleared by VINT, VDP
-  status polling) must be written as `wait_until`/`wait_vblank`. A loop that polls a
+  status polling) must be written as `wait_until`/`wait_vblank`. Their repeated reads are
+  collapsed in traces (`docs/trace-format.md`, "Poll reads"). A loop that polls a
   register the engine resolves immediately (e.g. the Z80 BUSREQ grant) may stay a loop.
 - Writes made by main code take effect immediately on engine state, but rendering of the
   whole frame happens at the wait point. Mid-frame effects must come from HINT handlers.
+- Behaviour that depends on how long main code takes is outside the contract. Example: an
+  interrupt that becomes pending while interrupts are masked during init, and fires when
+  `SR` is lowered. A decompilation must reproduce the original's observable result by hand
+  where that matters.
   *(Open: a `wait_line(n)` primitive for main-code raster effects.)*
 
 ### VDP timing
@@ -122,4 +128,5 @@ read/write callbacks and reset/frame hooks.
 - `TAS` write-back and word access to 8-bit devices: confirm on the oracle.
 - Whether Z80 space is accessible while the Z80 is held in reset without BUSREQ.
 - `wait_line(n)` for raster effects in main code.
-- Project license (the engine must not include code from GPL/AGPL references).
+- ~~Project license~~: MIT (decided 2026-11-24). The engine must not include code from
+  GPL/AGPL references or from Genesis Plus GX (non-commercial licence).

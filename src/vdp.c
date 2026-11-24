@@ -18,6 +18,7 @@ void vdp_reset(void)
 }
 
 bool vdp_vint_enabled(void) { return (V.reg[1] & 0x20) != 0; }
+void vdp_vint_ack(void)      { V.vint_pending = false; }
 
 static unsigned autoinc(void) { return V.reg[15]; }
 
@@ -204,18 +205,35 @@ void vdp_wr16(uint32_t addr, uint16_t v)
 /* Frame                                                                     */
 /* ------------------------------------------------------------------------ */
 
+unsigned vdp_active_lines(void) { return active_lines(); }
+
+void vdp_begin_frame(void)
+{
+    V.in_vblank = false;
+    V.hint_counter = V.reg[10];
+}
+
+bool vdp_line(unsigned line)
+{
+    (void)line; /* TODO(milestone 4): render the line here. */
+    if (V.hint_counter-- == 0) {
+        V.hint_counter = V.reg[10];
+        return (V.reg[0] & 0x10) != 0;
+    }
+    return false;
+}
+
+void vdp_end_active(void)
+{
+    V.in_vblank = true;
+    V.vint_pending = true;
+}
+
 void vdp_frame(void (*hint)(void))
 {
     unsigned lines = active_lines();
-    V.in_vblank = false;
-    V.hint_counter = V.reg[10];
-    for (unsigned line = 0; line < lines; line++) {
-        /* TODO(milestone 4): render the line here. */
-        if (V.hint_counter-- == 0) {
-            V.hint_counter = V.reg[10];
-            if ((V.reg[0] & 0x10) && hint) hint();
-        }
-    }
-    V.in_vblank = true;
-    V.vint_pending = true;
+    vdp_begin_frame();
+    for (unsigned line = 0; line < lines; line++)
+        if (vdp_line(line) && hint) hint();
+    vdp_end_active();
 }

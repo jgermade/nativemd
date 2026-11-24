@@ -7,8 +7,10 @@ interrupts, sound, controllers, saves and frame pacing.
 
 Fidelity: **behaviour-exact, not cycle-exact.** See [docs/contract.md](docs/contract.md).
 
-Status: early draft (contract 0.1). Headless core, unit tests and a `hello` ROM run end
-to end; rendering, the Z80 scheduler and sound are not implemented yet.
+Status: early draft (contract 0.1). Headless core, an oracle (Musashi running the original
+68000 code on the same hardware model) and a `hello` program whose C produces exactly the
+same bus trace as its 68000 code. Rendering, the Z80 scheduler and sound are not
+implemented yet.
 
 ## Build
 
@@ -22,10 +24,15 @@ ctest --test-dir build --output-on-failure
 
 - `include/nativemd/` — the contract headers game C is written against.
 - `src/` — the engine.
-- `tools/` — `nmd-tracediff` (bus trace comparison), `mkhello` (test ROM generator).
-- `tests/` — unit tests and the `hello` game (C + generated ROM + golden trace).
+- `harness/oracle/` — `nmd-oracle`: original code on Musashi + the engine's hardware.
+- `tools/` — `nmd-disasm` (68000 disassembler), `nmd-tracediff`, `nmd-statediff`,
+  `mkhello` (test ROM generator).
+- `tests/` — unit tests and `hello` (68000 source, C, generated ROM, golden files).
 - `docs/` — contract, trace format, verification harness.
+- `third_party/musashi/` — Musashi 68000 core (MIT), used only by the oracle and tools.
 - [`ROADMAP/`](ROADMAP/) — the plan by date. [`RECORD/`](RECORD/) — project memory.
 - [`AGENTS.md`](AGENTS.md) — rules for agents and humans.
 
 No ROMs or game assets are distributed: every user supplies their own dump.
+
+License: MIT (see [LICENSE](LICENSE)); third-party code keeps its own license.

@@ -58,13 +58,29 @@ typedef struct nmd_machine {
 extern nmd_machine NMD;
 
 /* bus.c */
-uint16_t nmd_bus_rd16_raw(uint32_t addr); /* no trace; used by DMA */
+/* Untraced bus access: used by DMA, the Z80 window and the oracle. */
+uint8_t  nmd_bus_rd8_raw(uint32_t addr);
+uint16_t nmd_bus_rd16_raw(uint32_t addr);
+void     nmd_bus_wr8_raw(uint32_t addr, uint8_t v);
+void     nmd_bus_wr16_raw(uint32_t addr, uint16_t v);
+
+/* trace.c: reads made while polling a wait condition are collapsed. */
+void nmd_trace_poll_begin(void);
+void nmd_trace_poll_pause(void);  /* around interrupt handlers */
+void nmd_trace_poll_resume(void);
+void nmd_trace_poll_end(void);
 
 /* vdp.c */
 void     vdp_reset(void);
 uint16_t vdp_rd16(uint32_t addr);
 void     vdp_wr16(uint32_t addr, uint16_t v);
 void     vdp_frame(void (*hint)(void)); /* active display: line loop + HINT */
+/* Line-level steps (vdp_frame is built from these; the oracle uses them). */
+unsigned vdp_active_lines(void);
+void     vdp_begin_frame(void);
+bool     vdp_line(unsigned line);       /* true when a HINT should be raised */
+void     vdp_end_active(void);          /* VBlank starts; VINT pending */
+void     vdp_vint_ack(void);
 bool     vdp_vint_enabled(void);
 
 /* io.c */

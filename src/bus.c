@@ -27,6 +27,7 @@ static uint8_t rom_rd8(uint32_t addr)
 /* 8-bit read, no tracing. */
 static uint8_t bus_rd8(uint32_t addr)
 {
+    addr &= 0xFFFFFF;
     const nmd_chip *c = find_chip(addr);
     if (c) {
         if (!c->rd8) nmd_fatal("chip %s: no rd8 handler for %06X", c->name, addr);
@@ -86,6 +87,7 @@ uint16_t nmd_bus_rd16_raw(uint32_t addr)
 
 static void bus_wr8(uint32_t addr, uint8_t v)
 {
+    addr &= 0xFFFFFF;
     const nmd_chip *c = find_chip(addr);
     if (c) {
         if (!c->wr8) nmd_fatal("chip %s: no wr8 handler for %06X", c->name, addr);
@@ -115,6 +117,7 @@ static void bus_wr8(uint32_t addr, uint8_t v)
 
 static void bus_wr16(uint32_t addr, uint16_t v)
 {
+    addr &= 0xFFFFFF;
     if (addr & 1) nmd_fatal("68k address error: write16 at odd address %06X", addr);
     const nmd_chip *c = find_chip(addr);
     if (c) {
@@ -137,6 +140,10 @@ static void bus_wr16(uint32_t addr, uint16_t v)
     if (addr <= HW_ROM_END) nmd_fatal("68k write16 to ROM %06X <- %04X (no mapper chip claims it)", addr, v);
     nmd_fatal("68k write16 to unmapped address %06X <- %04X", addr, v);
 }
+
+uint8_t nmd_bus_rd8_raw(uint32_t addr)              { return bus_rd8(addr); }
+void    nmd_bus_wr8_raw(uint32_t addr, uint8_t v)   { bus_wr8(addr, v); }
+void    nmd_bus_wr16_raw(uint32_t addr, uint16_t v) { bus_wr16(addr, v); }
 
 /* ------------------------------------------------------------------------ */
 /* Public contract                                                           */

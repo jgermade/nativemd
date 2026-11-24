@@ -59,21 +59,61 @@ Big-endian. Implemented by `nmd_state_save` / `nmd_state_load` (`src/state.c`).
 
 Version 2 will add VDP port latches, I/O and Z80 bus state as the engine grows.
 
-## Oracle choice (open)
+## Oracle: `nmd-oracle`
 
-Candidates: Musashi plus a Z80 core with our own bus (full control over the hook), or a
-patched Genesis Plus GX. Whether BlastEm can produce bus traces is unverified. The oracle
-lives outside the engine and is only used for comparison; GPL code must not be copied into
-the engine.
+Musashi (MIT, `third_party/musashi`) runs the ROM's original 68000 code; the **nativemd
+hardware model** sits behind it. The oracle therefore checks the CPU side: real 68000
+semantics against the hand-written C, on identical hardware. The hardware model is
+validated separately (own test ROMs, other emulators, MiSTer cores).
+
+- **Frames mode** (`--frames N`): reset, then NTSC line timing (262 lines × 3420 master
+  clocks, 68000 at /7). The VDP raises HINT per line and VINT at the end of active display;
+  the run stops right after the `RTE` of the N-th VINT handler, the point where the engine's
+  `nmd_run_frames(N)` stops.
+- **Routine mode** (`--state S --call ADDR [--irq]`): load a state, push a sentinel return
+  address (or an exception frame for an interrupt handler) and run until it returns.
+- **Trace filters**: instruction fetches (Musashi's immediate reads) are not traced;
+  PC-relative reads are. The vector fetch of an interrupt and accesses to the stack range
+  (default: the 1 KB below the initial SSP, `--stack`) are dropped, because the C does not
+  reproduce exception frames, `JSR`/`RTS` traffic or register saves.
+- **Idle loop** (`--idle LABEL`): repeated identical reads inside the declared polling
+  loop are collapsed, matching the collapsing of `wait_until` reads on the C side.
+- **Corrections to Musashi**: `CLR` to memory performs its read cycle (Musashi omits it;
+  the 68000 does it). `TAS` does not write back (Mega Drive bus).
+- `--coverage FILE` lists executed instruction addresses, for `nmd-disasm --coverage`.
+
+Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exact
+`MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
+references (hardware, FX68K).
+
+## Tools
+
+| Tool | Purpose |
+|---|---|
+| `nmd-oracle` | run original code, emit trace / state / coverage |
+| `nmd-tracediff` | compare traces |
+| `nmd-statediff` | compare state files (RAM ranges can be ignored; registers on request) |
+| `nmd-disasm` | 68000 disassembler (Musashi's); symbols; coverage-guided code/data split |
+
+## The hello example
+
+`tests/hello` has the three levels of one program: `hello.s` (68000 source, encoded by
+`tools/mkhello.c`, checked by disassembly against `hello.lst`), `hello_game.c` (the C) and
+the ROM image. CTest checks that the oracle running the ROM and the engine running the C
+produce the same trace (342 accesses over 10 frames) and the same final state, and that a
+single routine (`VInt`) gives the same trace from the same captured state.
 
 ## Status
 
 | Piece | State |
 |---|---|
 | Trace format, writer, parser, `nmd-tracediff` | done |
-| State files | done (v1) |
-| Golden-trace regression test (`tests/hello`) | done |
-| Oracle emulator with bus hook | to do |
-| Capture at breakpoints, sentinel return | to do |
+| State files, `nmd-statediff` | done (v1) |
+| Oracle on Musashi: frames and routine modes, filters | done |
+| End-to-end check on `hello` (ASM vs C) | done |
+| Disassembler with coverage | done (first version) |
+| Breakpoint capture of many states per routine while playing | to do |
 | Side-effect read replay | to do |
 | Per-routine suite runner | to do |
+| Hybrid execution (routines without C run on the oracle) | to do |
+| Z80 in the oracle | to do |

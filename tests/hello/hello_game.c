@@ -1,6 +1,8 @@
 /*
- * hello_game.c - the "decompiled" C of the hello ROM, written against the
- * contract exactly as a real game decompilation would be.
+ * hello_game.c - the "decompiled" C of the hello ROM (tests/hello/hello.s),
+ * written against the contract exactly as a real game decompilation would be.
+ * Every bus access matches the 68000 program one for one; the hello_oracle
+ * test checks that.
  */
 #include <stddef.h>
 
@@ -43,8 +45,8 @@ static void z80_init(void)
 {
     m68k_wr16(HW_Z80_BUSREQ, 0x0100);
     m68k_wr16(HW_Z80_RESET, 0x0100);
-    while (m68k_rd16(HW_Z80_BUSREQ) & 0x0100) {
-        /* granted immediately by the engine; loop kept as in the original */
+    while (m68k_rd8(HW_Z80_BUSREQ) & 0x01) {
+        /* btst #0,($A11100).l; bne.s: granted at once, the loop stays as in the original */
     }
     m68k_wr8(0xA00000, 0xF3); /* di   */
     m68k_wr8(0xA00001, 0x76); /* halt */
@@ -56,7 +58,7 @@ static void z80_init(void)
 static void vdp_init(void)
 {
     (void)m68k_rd16(HW_VDP_CTRL);    /* reset the command latch */
-    vdp_set_reg(0, 0x14);            /* HINT on, H/V counter latch off */
+    vdp_set_reg(0, 0x04);            /* HINT off (VINT turns it on) */
     vdp_set_reg(1, 0x14);            /* display off, VINT off, DMA on, V28 */
     vdp_set_reg(2, HELLO_PLANE_A >> 10);
     vdp_set_reg(4, 0x07);            /* plane B at E000 */
@@ -139,6 +141,12 @@ static uint8_t read_pad(void)
 
 static void hello_vint(void)
 {
+    /*
+     * HINT is enabled here, not during init: on hardware a HINT raised while
+     * init runs with interrupts masked would stay latched and fire as soon as
+     * SR is lowered, which depends on instruction timing.
+     */
+    vdp_set_reg(0, 0x14);
     M68K_RMW16(HELLO_RAM_FRAMES, v + 1);
     m68k_wr8(HELLO_RAM_PAD, read_pad());
     m68k_clr8(HELLO_RAM_VFLAG);

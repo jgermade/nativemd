@@ -159,7 +159,7 @@ static void run_one_frame(void)
     vdp_frame(hint_dispatch);
     if (vdp_vint_enabled()) {
         take_interrupt(6, HW_VEC_VINT);
-        NMD.vdp.vint_pending = false;
+        vdp_vint_ack();
     }
     for (size_t i = 0; i < NMD.chip_count; i++)
         if (NMD.chips[i].frame) NMD.chips[i].frame(NMD.chips[i].user);
@@ -200,7 +200,18 @@ void wait_vblank(void)
 
 void wait_until(bool (*cond)(void *user), void *user)
 {
-    while (!cond(user)) wait_vblank();
+    /*
+     * The condition's reads stand for the polling loop of the original;
+     * repeated identical reads are collapsed in the trace, as the oracle
+     * does for the declared idle loop.
+     */
+    nmd_trace_poll_begin();
+    while (!cond(user)) {
+        nmd_trace_poll_pause();
+        wait_vblank();
+        nmd_trace_poll_resume();
+    }
+    nmd_trace_poll_end();
 }
 
 /* ------------------------------------------------------------------------ */

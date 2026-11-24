@@ -1,9 +1,14 @@
 /*
  * test_hello - runs the hello ROM end to end on the headless host.
  *
- * Usage: test_hello HELLO.bin [TRACE_OUT]
- * With TRACE_OUT, the bus trace of the whole run is written there (CTest
- * compares it against tests/hello/hello.trace with nmd-tracediff).
+ * Usage: test_hello HELLO.bin [TRACE_OUT [STATE_OUT]]
+ *        test_hello HELLO.bin --call ADDR STATE_IN TRACE_OUT
+ *
+ * First form: run 10 frames and check the results. TRACE_OUT receives the
+ * bus trace (compared with the golden trace and with the oracle's), and
+ * STATE_OUT the final state (compared with the oracle's).
+ * Second form ("candidate" side of the per-routine harness): load a state,
+ * call the routine at ADDR through the routine table, write its trace.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,12 +41,30 @@ static uint8_t *read_file(const char *path, size_t *size)
 
 static uint16_t ram16(uint32_t a) { const uint8_t *r = nmd_ram(); return (uint16_t)(r[a & 0xFFFF] << 8 | r[(a + 1) & 0xFFFF]); }
 
+static int call_mode(const uint8_t *rom, size_t rom_size, const char *addr, const char *state,
+                     const char *trace_path)
+{
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC };
+    if (!nmd_init(&cfg, &hello_game, rom, rom_size)) return 2;
+    if (!nmd_state_load(state)) { fprintf(stderr, "cannot load %s\n", state); return 2; }
+    FILE *trace = fopen(trace_path, "w");
+    if (!trace) { perror(trace_path); return 2; }
+    nmd_trace_open(trace);
+    call_routine((uint32_t)strtoul(addr, NULL, 16));
+    nmd_trace_open(NULL);
+    fclose(trace);
+    nmd_shutdown();
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc < 2) { fprintf(stderr, "usage: %s HELLO.bin [TRACE_OUT]\n", argv[0]); return 2; }
+    if (argc < 2) { fprintf(stderr, "usage: %s HELLO.bin [TRACE_OUT [STATE_OUT]]\n", argv[0]); return 2; }
     size_t rom_size;
     uint8_t *rom = read_file(argv[1], &rom_size);
     if (!rom) return 2;
+    if (argc == 6 && strcmp(argv[2], "--call") == 0)
+        return call_mode(rom, rom_size, argv[3], argv[4], argv[5]);
 
     FILE *trace = NULL;
     if (argc >= 3) {
@@ -76,8 +99,8 @@ int main(int argc, char **argv)
 
     /* VINT ran once per frame. */
     CHECK(ram16(HELLO_RAM_FRAMES) == 10, "frame counter %u", ram16(HELLO_RAM_FRAMES));
-    /* HINT every 28 lines of 224: 8 per frame. */
-    CHECK(ram16(HELLO_RAM_HINTS) == 80, "hint counter %u", ram16(HELLO_RAM_HINTS));
+    /* HINT every 28 lines of 224: 8 per frame, from frame 1 on. */
+    CHECK(ram16(HELLO_RAM_HINTS) == 72, "hint counter %u", ram16(HELLO_RAM_HINTS));
     /* Pad was sampled with START held (bit 7). */
     CHECK(nmd_ram()[HELLO_RAM_PAD & 0xFFFF] == 0x80, "pad %02X", nmd_ram()[HELLO_RAM_PAD & 0xFFFF]);
 
@@ -105,6 +128,7 @@ int main(int argc, char **argv)
     CHECK(nmd_vdp_regs()[1] == 0x74, "reg1 %02X", nmd_vdp_regs()[1]);
     CHECK(nmd_vdp_regs()[15] == 2, "reg15 %02X", nmd_vdp_regs()[15]);
 
+    if (argc >= 4 && !nmd_state_save(argv[3])) { perror(argv[3]); return 2; }
     nmd_shutdown();
     free(rom);
     if (failures) { fprintf(stderr, "%d failure(s)\n", failures); return 1; }
