@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "machine.h"
 #include "z80.h"
@@ -75,11 +76,59 @@ const uint8_t *nmd_rom(size_t *size);
 
 /*
  * Machine state snapshot (docs/harness.md, "State files"): CPU registers,
- * RAM, VRAM, CRAM, VSRAM, VDP registers, Z80 RAM. Used to capture the inputs
- * of a routine on the oracle and replay them on the candidate.
+ * RAM, VRAM, CRAM, VSRAM, VDP registers, Z80 RAM, and the VDP / I/O / Z80
+ * latches. Used to capture the inputs of a routine on the oracle and replay
+ * them on the candidate.
  */
-bool nmd_state_save(const char *path);
-bool nmd_state_load(const char *path);
+typedef struct nmd_state_image {
+    m68k_regs regs;
+    uint8_t   ram[0x10000];
+    uint8_t   vram[0x10000];
+    uint16_t  cram[64];
+    uint16_t  vsram[40];
+    uint8_t   vdp_reg[24];
+    uint8_t   z80_ram[0x2000];
+    /* latches (state version 2) */
+    uint8_t   vdp_code;
+    bool      vdp_cmd_pending, vdp_fill_pending, vdp_in_vblank, vdp_vint_pending;
+    uint16_t  vdp_addr, vdp_read_buffer;
+    int16_t   vdp_hint_counter;
+    uint8_t   io_data[3], io_ctrl[3];
+    uint16_t  io_pad[2];
+    bool      z80_busreq, z80_reset;
+    uint8_t   psg_last;
+    uint32_t  z80_bank;
+    uint8_t   ym_addr[2];
+    uint8_t   ym_reg[2][256];
+} nmd_state_image;
+
+bool nmd_state_save(const char *path);   /* capture + write */
+bool nmd_state_load(const char *path);   /* read + apply    */
+void nmd_state_capture(nmd_state_image *out);
+void nmd_state_apply(const nmd_state_image *in);
+bool nmd_state_write(const char *path, const nmd_state_image *in);
+bool nmd_state_read(const char *path, nmd_state_image *out); /* versions 1 and 2 */
+
+/*
+ * Routines without C. When call_routine / jump_routine, an interrupt or the
+ * reset vector reaches an address with no C, the handler is asked first; it
+ * returns true if it ran the routine (the harness uses this for hybrid
+ * execution on the oracle CPU). Without a handler, or if it returns false,
+ * the miss is fatal. The engine itself never emulates a CPU.
+ */
+typedef bool (*nmd_missing_routine_handler)(uint32_t addr, bool is_interrupt);
+void nmd_set_missing_routine_handler(nmd_missing_routine_handler handler);
+
+/*
+ * Side-effect read replay (docs/harness.md). While active, every read the C
+ * makes from a device (Z80 space, I/O, system control, VDP: $A00000-$DFFFFF)
+ * must match the next device read of the recorded trace in size and address;
+ * the device is still read (for its side effects) but the recorded value is
+ * returned. A mismatch or running out of records is fatal.
+ */
+bool   nmd_replay_open(FILE *recorded_trace);
+void   nmd_replay_close(void);
+size_t nmd_replay_remaining(void);
 
 #ifdef __cplusplus
 }

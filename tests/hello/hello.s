@@ -103,6 +103,7 @@ VInt:       movem.l d0-d1,-(sp)
             movem.l (sp)+,d0-d1
             rte
 
+            org $000460
 ReadPad:    move.b  #$40,IO_DATA1
             move.b  IO_DATA1,d0             ; ?1CBRLDU
             andi.b  #$3F,d0
@@ -114,5 +115,5 @@ ReadPad:    move.b  #$40,IO_DATA1
             not.b   d0                      ; SACBRLDU, active high
             rts
 
-            org $000480
+            org $0004A0
 Error:      bra.s   Error

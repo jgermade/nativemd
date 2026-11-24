@@ -62,20 +62,34 @@ target_link_libraries(musashi_cpu PUBLIC musashi_dasm m)
 
 # --- Tools ------------------------------------------------------------------
 
+# --- Harness ----------------------------------------------------------------
+
+add_library(nmd_compare STATIC harness/compare.c)
+target_include_directories(nmd_compare PUBLIC harness)
+target_link_libraries(nmd_compare PUBLIC nativemd)
+target_compile_options(nmd_compare PRIVATE ${NMD_WARNINGS})
+
+# Oracle (Musashi + the engine's hardware), suites and hybrid execution.
+add_library(nmd_harness STATIC harness/oracle/oracle.c harness/suite.c)
+target_include_directories(nmd_harness PUBLIC harness)
+target_link_libraries(nmd_harness PUBLIC nativemd nmd_compare musashi_cpu)
+target_compile_options(nmd_harness PRIVATE ${NMD_WARNINGS})
+
+add_executable(nmd-oracle harness/oracle/oracle_main.c)
+target_link_libraries(nmd-oracle PRIVATE nmd_harness)
+target_compile_options(nmd-oracle PRIVATE ${NMD_WARNINGS})
+
 add_executable(nmd-tracediff tools/tracediff.c)
-target_link_libraries(nmd-tracediff PRIVATE nativemd)
+target_link_libraries(nmd-tracediff PRIVATE nmd_compare)
 target_compile_options(nmd-tracediff PRIVATE ${NMD_WARNINGS})
 
 add_executable(nmd-statediff tools/statediff.c)
+target_link_libraries(nmd-statediff PRIVATE nmd_compare)
 target_compile_options(nmd-statediff PRIVATE ${NMD_WARNINGS})
 
 add_executable(nmd-disasm tools/disasm.c)
 target_link_libraries(nmd-disasm PRIVATE nativemd musashi_dasm)
 target_compile_options(nmd-disasm PRIVATE ${NMD_WARNINGS})
-
-add_executable(nmd-oracle harness/oracle/nmd_oracle.c)
-target_link_libraries(nmd-oracle PRIVATE nativemd musashi_cpu)
-target_compile_options(nmd-oracle PRIVATE ${NMD_WARNINGS})
 
 add_executable(mkhello tools/mkhello.c)
 target_include_directories(mkhello PRIVATE tests/hello)
@@ -131,15 +145,60 @@ if(NMD_BUILD_TESTS)
         COMMAND nmd-statediff --ignore-ram FFFA00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hello.nmds)
     set_tests_properties(hello_oracle_trace hello_oracle_state PROPERTIES DEPENDS "hello;hello_oracle")
 
-    # Per-routine harness: same starting state, call VInt on both sides.
-    add_test(NAME hello_routine_oracle
-        COMMAND nmd-oracle ${HELLO_ROM} --state ${OUT}/hello.nmds --call 000420 --irq
-                --trace ${OUT}/vint.oracle.trace --state-out ${OUT}/vint.oracle.nmds)
-    add_test(NAME hello_routine_candidate
-        COMMAND test_hello ${HELLO_ROM} --call 000420 ${OUT}/hello.nmds ${OUT}/vint.c.trace)
-    add_test(NAME hello_routine_trace
-        COMMAND nmd-tracediff ${OUT}/vint.oracle.trace ${OUT}/vint.c.trace)
-    set_tests_properties(hello_routine_oracle hello_routine_candidate PROPERTIES DEPENDS hello)
-    set_tests_properties(hello_routine_trace PROPERTIES
-        DEPENDS "hello_routine_oracle;hello_routine_candidate")
+    add_executable(hello_suite tests/hello/hello_suite.c tests/hello/hello_game.c)
+    target_link_libraries(hello_suite PRIVATE nmd_harness)
+    target_include_directories(hello_suite PRIVATE tests/hello)
+    target_compile_options(hello_suite PRIVATE ${NMD_WARNINGS})
+
+    # The same suite on a deliberately wrong C must fail (the harness is not a no-op).
+    add_executable(hello_suite_bug tests/hello/hello_suite.c tests/hello/hello_game.c)
+    target_link_libraries(hello_suite_bug PRIVATE nmd_harness)
+    target_include_directories(hello_suite_bug PRIVATE tests/hello)
+    target_compile_definitions(hello_suite_bug PRIVATE HELLO_BUG)
+
+    add_executable(test_hello_hybrid tests/hello/test_hello_hybrid.c tests/hello/hello_game.c)
+    target_link_libraries(test_hello_hybrid PRIVATE nmd_harness)
+    target_include_directories(test_hello_hybrid PRIVATE tests/hello)
+    target_compile_options(test_hello_hybrid PRIVATE ${NMD_WARNINGS})
+
+    # Capture real states at the entry of VInt and HInt while the ROM runs.
+    set(STATES ${OUT}/hello_states)
+    file(MAKE_DIRECTORY ${STATES})
+    add_test(NAME hello_capture
+        COMMAND nmd-oracle ${HELLO_ROM} --frames 10 --input ${HELLO_DIR}/hello.input
+                --sym ${HELLO_SYM} --idle WaitLoop --capture VInt --capture HInt --capture ReadPad
+                --capture-dir ${STATES} --capture-max 4)
+    set(VINT_STATES ${STATES}/VInt.0000.nmds ${STATES}/VInt.0001.nmds ${STATES}/VInt.0002.nmds ${STATES}/VInt.0003.nmds)
+    set(HINT_STATES ${STATES}/HInt.0000.nmds ${STATES}/HInt.0001.nmds ${STATES}/HInt.0002.nmds ${STATES}/HInt.0003.nmds)
+    set(PAD_STATES ${STATES}/ReadPad.0000.nmds ${STATES}/ReadPad.0001.nmds ${STATES}/ReadPad.0002.nmds ${STATES}/ReadPad.0003.nmds)
+
+    # Per-routine suites: oracle vs C from each captured state.
+    add_test(NAME hello_suite_vint
+        COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call VInt --irq ${VINT_STATES})
+    add_test(NAME hello_suite_vint_replay
+        COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call VInt --irq --replay ${VINT_STATES})
+    add_test(NAME hello_suite_hint
+        COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call HInt --irq ${HINT_STATES})
+    # A routine with a register ABI: d0 is compared too.
+    add_test(NAME hello_suite_readpad
+        COMMAND hello_suite ${HELLO_ROM} --sym ${HELLO_SYM} --call ReadPad --regs d0 ${PAD_STATES})
+    add_test(NAME hello_suite_detects_bug
+        COMMAND hello_suite_bug ${HELLO_ROM} --sym ${HELLO_SYM} --call VInt --irq ${VINT_STATES})
+    set_tests_properties(hello_suite_detects_bug PROPERTIES WILL_FAIL TRUE)
+    set_tests_properties(hello_suite_vint hello_suite_vint_replay hello_suite_hint hello_suite_readpad
+        hello_suite_detects_bug
+        PROPERTIES DEPENDS hello_capture)
+
+    # Hybrid: only HInt in C, the rest runs as original code; same trace as the oracle.
+    foreach(MODE hint readpad)
+        add_test(NAME hello_hybrid_${MODE}
+            COMMAND test_hello_hybrid ${MODE} ${HELLO_ROM} ${HELLO_SYM}
+                    ${OUT}/hybrid_${MODE}.trace ${OUT}/hybrid_${MODE}.nmds)
+        add_test(NAME hello_hybrid_${MODE}_trace
+            COMMAND nmd-tracediff ${OUT}/oracle.trace ${OUT}/hybrid_${MODE}.trace)
+        add_test(NAME hello_hybrid_${MODE}_state
+            COMMAND nmd-statediff --ignore-ram FFFA00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hybrid_${MODE}.nmds)
+        set_tests_properties(hello_hybrid_${MODE}_trace hello_hybrid_${MODE}_state
+            PROPERTIES DEPENDS "hello_hybrid_${MODE};hello_oracle")
+    endforeach()
 endif()

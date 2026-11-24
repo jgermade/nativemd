@@ -8,8 +8,9 @@
 /* Code (hello.s; encoded by mkhello) */
 #define HELLO_ADDR_MAIN     0x000200u
 #define HELLO_ADDR_HINT     0x000400u
-#define HELLO_ADDR_VINT     0x000420u /* ReadPad follows it */
-#define HELLO_ADDR_ERROR    0x000480u
+#define HELLO_ADDR_VINT     0x000420u
+#define HELLO_ADDR_READPAD  0x000460u /* bsr from VInt; returns the pad in d0.b */
+#define HELLO_ADDR_ERROR    0x0004A0u
 #define HELLO_CODE_END      0x000500u
 
 /* Data */

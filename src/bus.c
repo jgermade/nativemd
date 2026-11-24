@@ -7,6 +7,65 @@
 
 m68k_regs M68K;
 
+static nmd_missing_routine_handler missing_handler;
+
+void nmd_set_missing_routine_handler(nmd_missing_routine_handler h) { missing_handler = h; }
+
+bool nmd_run_missing_routine(uint32_t addr, bool is_interrupt)
+{
+    return missing_handler && missing_handler(addr & 0xFFFFFF, is_interrupt);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Side-effect read replay                                                   */
+/* ------------------------------------------------------------------------ */
+
+static nmd_trace_line *replay;
+static size_t          replay_len, replay_pos;
+static bool            replay_active;
+
+static bool is_device(uint32_t addr) { return addr >= 0xA00000 && addr <= 0xDFFFFF; }
+
+bool nmd_replay_open(FILE *f)
+{
+    nmd_replay_close();
+    char line[256];
+    nmd_trace_line l;
+    while (fgets(line, sizeof line, f)) {
+        int k = nmd_trace_parse(line, &l);
+        if (k < 0) { nmd_replay_close(); return false; }
+        if (k == 0 || l.write || l.bus != NMD_TRACE_M68K || !is_device(l.addr)) continue;
+        nmd_trace_line *grown = realloc(replay, (replay_len + 1) * sizeof *replay);
+        if (!grown) { nmd_replay_close(); return false; }
+        replay = grown;
+        replay[replay_len++] = l;
+    }
+    replay_active = true;
+    return true;
+}
+
+void nmd_replay_close(void)
+{
+    free(replay);
+    replay = NULL;
+    replay_len = replay_pos = 0;
+    replay_active = false;
+}
+
+size_t nmd_replay_remaining(void) { return replay_len - replay_pos; }
+
+static uint32_t replayed(uint32_t addr, unsigned bits, uint32_t actual)
+{
+    if (!replay_active || !is_device(addr)) return actual;
+    if (replay_pos >= replay_len)
+        nmd_fatal("replay: C read%u %06X, but the recorded trace has no more device reads", bits, addr);
+    const nmd_trace_line *r = &replay[replay_pos++];
+    if (r->bits != bits || r->addr != addr)
+        nmd_fatal("replay: C read%u %06X, recorded read%u %06X (device read #%zu)",
+                  bits, addr, r->bits, r->addr, replay_pos);
+    return r->value;
+}
+
 /* ------------------------------------------------------------------------ */
 
 static const nmd_chip *find_chip(uint32_t addr)
@@ -152,7 +211,7 @@ void    nmd_bus_wr16_raw(uint32_t addr, uint16_t v) { bus_wr16(addr, v); }
 uint8_t m68k_rd8(uint32_t addr)
 {
     addr &= 0xFFFFFF;
-    uint8_t v = bus_rd8(addr);
+    uint8_t v = (uint8_t)replayed(addr, 8, bus_rd8(addr));
     nmd_trace_access(NMD_TRACE_M68K, false, 8, addr, v);
     return v;
 }
@@ -160,7 +219,7 @@ uint8_t m68k_rd8(uint32_t addr)
 uint16_t m68k_rd16(uint32_t addr)
 {
     addr &= 0xFFFFFF;
-    uint16_t v = nmd_bus_rd16_raw(addr);
+    uint16_t v = (uint16_t)replayed(addr, 16, nmd_bus_rd16_raw(addr));
     nmd_trace_access(NMD_TRACE_M68K, false, 16, addr, v);
     return v;
 }
@@ -233,7 +292,10 @@ void call_routine(uint32_t addr)
 {
     addr &= 0xFFFFFF;
     nmd_routine_fn fn = find_routine(addr);
-    if (!fn) nmd_fatal("call_routine: no C for 68k address %06X", addr);
+    if (!fn) {
+        if (nmd_run_missing_routine(addr, false)) return;
+        nmd_fatal("call_routine: no C for 68k address %06X", addr);
+    }
     if (nmd_trace_enabled()) nmd_trace_comment("call %06X %s", addr, routine_name(addr));
     fn();
     if (nmd_trace_enabled()) nmd_trace_comment("ret %06X", addr);
@@ -243,7 +305,10 @@ void jump_routine(uint32_t addr)
 {
     addr &= 0xFFFFFF;
     nmd_routine_fn fn = find_routine(addr);
-    if (!fn) nmd_fatal("jump_routine: no C for 68k address %06X", addr);
+    if (!fn) {
+        if (nmd_run_missing_routine(addr, false)) return;
+        nmd_fatal("jump_routine: no C for 68k address %06X", addr);
+    }
     if (nmd_trace_enabled()) nmd_trace_comment("jump %06X %s", addr, routine_name(addr));
     fn();
 }

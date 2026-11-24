@@ -176,6 +176,7 @@ static void emit_code(void)
     w(0x4CDF); w(0x0003);            /* movem.l (sp)+,d0-d1 */
     w(0x4E73);                       /* rte */
 
+    org(HELLO_ADDR_READPAD);
     label("ReadPad");
     move_b_imm_abs(0x40, 0xA10003);
     move_b_abs_d0(0xA10003);

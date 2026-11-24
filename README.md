@@ -24,7 +24,8 @@ ctest --test-dir build --output-on-failure
 
 - `include/nativemd/` — the contract headers game C is written against.
 - `src/` — the engine.
-- `harness/oracle/` — `nmd-oracle`: original code on Musashi + the engine's hardware.
+- `harness/` — verification: the oracle (`nmd-oracle`, original code on Musashi + the
+  engine's hardware), per-routine suites, side-effect replay, hybrid execution.
 - `tools/` — `nmd-disasm` (68000 disassembler), `nmd-tracediff`, `nmd-statediff`,
   `mkhello` (test ROM generator).
 - `tests/` — unit tests and `hello` (68000 source, C, generated ROM, golden files).

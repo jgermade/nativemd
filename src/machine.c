@@ -105,12 +105,13 @@ static void take_interrupt(unsigned level, uint32_t vector)
     if (((M68K.sr & M68K_SR_IMASK) >> 8) >= level) return; /* masked */
     uint32_t handler = be32(NMD.rom + vector) & 0xFFFFFF;
     nmd_routine_fn fn = find_routine(handler);
-    if (!fn) nmd_fatal("interrupt level %u: no C for handler %06X (vector %03X)", level, handler, vector);
 
     m68k_regs saved = M68K;
     M68K.sr = (uint16_t)((M68K.sr & ~M68K_SR_IMASK) | (level << 8) | M68K_SR_S);
     if (nmd_trace_enabled()) nmd_trace_comment("irq %u %06X", level, handler);
-    fn();
+    if (fn) fn();
+    else if (!nmd_run_missing_routine(handler, true))
+        nmd_fatal("interrupt level %u: no C for handler %06X (vector %03X)", level, handler, vector);
     if (nmd_trace_enabled()) nmd_trace_comment("rte %u", level);
     M68K = saved;
 }
@@ -125,8 +126,8 @@ static void game_entry(void)
 {
     uint32_t pc = be32(NMD.rom + HW_VEC_RESET) & 0xFFFFFF;
     nmd_routine_fn fn = find_routine(pc);
-    if (!fn) nmd_fatal("reset: no C for reset PC %06X", pc);
-    fn();
+    if (fn) fn();
+    else if (!nmd_run_missing_routine(pc, false)) nmd_fatal("reset: no C for reset PC %06X", pc);
 }
 
 static void start_game(void)

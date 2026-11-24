@@ -15,11 +15,13 @@ static void hello_main(void);
 static void hello_hint(void);
 static void hello_vint(void);
 static void hello_error(void);
+static void abi_read_pad(void);
 
 static const nmd_routine routines[] = {
     { HELLO_ADDR_MAIN,  hello_main,  "Main"  },
     { HELLO_ADDR_HINT,  hello_hint,  "HInt"  },
     { HELLO_ADDR_VINT,  hello_vint,  "VInt"  },
+    { HELLO_ADDR_READPAD, abi_read_pad, "ReadPad" },
     { HELLO_ADDR_ERROR, hello_error, "Error" },
 };
 
@@ -139,6 +141,12 @@ static uint8_t read_pad(void)
     return (uint8_t)~v;                          /* SACBRLDU, active high */
 }
 
+/* ReadPad as the ASM calls it: result in the low byte of d0 (d1 is scratch). */
+static void abi_read_pad(void)
+{
+    M68K.d[0] = (M68K.d[0] & 0xFFFFFF00u) | read_pad();
+}
+
 static void hello_vint(void)
 {
     /*
@@ -149,7 +157,11 @@ static void hello_vint(void)
     vdp_set_reg(0, 0x14);
     M68K_RMW16(HELLO_RAM_FRAMES, v + 1);
     m68k_wr8(HELLO_RAM_PAD, read_pad());
+#ifdef HELLO_BUG
+    m68k_wr8(HELLO_RAM_VFLAG, 0);    /* deliberate bug: CLR's read cycle is missing */
+#else
     m68k_clr8(HELLO_RAM_VFLAG);
+#endif
 }
 
 static void hello_error(void)

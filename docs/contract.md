@@ -67,7 +67,10 @@ repository ships ROMs or game assets.
 - Every address reachable indirectly (exception vectors, jump tables, pointers in data) has
   an entry in the game's routine table (`nmd_game.routines`). `call_routine(addr)` and
   `jump_routine(addr)` dispatch through it.
-- **A missing address is a fatal error, never a fallback.**
+- **A missing address is a fatal error, never a silent fallback.** The only exception is
+  explicit: a harness may register a missing-routine handler
+  (`nmd_set_missing_routine_handler`), which is how hybrid execution runs routines that
+  have no C yet as original code. The engine itself never emulates a CPU.
 - The reset vector's PC must be in the table; so must the handler of every interrupt the
   game enables.
 

@@ -64,6 +64,9 @@ uint16_t nmd_bus_rd16_raw(uint32_t addr);
 void     nmd_bus_wr8_raw(uint32_t addr, uint8_t v);
 void     nmd_bus_wr16_raw(uint32_t addr, uint16_t v);
 
+/* Ask the missing-routine handler (nativemd.h); false if none ran it. */
+bool nmd_run_missing_routine(uint32_t addr, bool is_interrupt);
+
 /* trace.c: reads made while polling a wait condition are collapsed. */
 void nmd_trace_poll_begin(void);
 void nmd_trace_poll_pause(void);  /* around interrupt handlers */

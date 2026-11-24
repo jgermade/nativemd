@@ -203,6 +203,53 @@ static void test_state(void)
     remove(path);
 }
 
+static void test_replay(void)
+{
+    setup();
+    /* A recorded trace: RAM accesses are ignored, device reads are replayed. */
+    const char *rec =
+        "R16 FF0000 -> 1234\n"
+        "R16 C00004 -> BEEF\n"
+        "W8 A10009 <- 40\n"
+        "R8 A10003 -> 12\n";
+    FILE *f = fmemopen((void *)rec, strlen(rec), "r");
+    CHECK(nmd_replay_open(f), "replay open");
+    fclose(f);
+    CHECK(nmd_replay_remaining() == 2, "two device reads recorded");
+    CHECK(m68k_rd16(0xFF0000) == 0, "RAM is not replayed");
+    CHECK(m68k_rd16(HW_VDP_CTRL) == 0xBEEF, "VDP status replayed");
+    CHECK(m68k_rd8(HW_IO_DATA1) == 0x12, "pad replayed");
+    CHECK(nmd_replay_remaining() == 0, "replay consumed");
+    nmd_set_fatal_handler(on_fatal);
+    EXPECT_FATAL(m68k_rd16(HW_VDP_CTRL));                   /* nothing left */
+    nmd_replay_close();
+
+    f = fmemopen((void *)rec, strlen(rec), "r");
+    nmd_replay_open(f);
+    fclose(f);
+    EXPECT_FATAL(m68k_rd8(HW_IO_DATA1));                    /* out of order */
+    CHECK(strstr(fatal_msg, "recorded read16 C00004") != NULL, "mismatch message: %s", fatal_msg);
+    nmd_replay_close();
+    nmd_set_fatal_handler(NULL);
+}
+
+static void test_state_v2(void)
+{
+    setup();
+    m68k_wr32(HW_VDP_CTRL, VDP_VRAM_WRITE(0x1234 & ~1u)); /* leaves addr/code latched */
+    m68k_wr8(HW_IO_CTRL1, 0x40);
+    m68k_wr16(HW_Z80_BUSREQ, 0x0100);
+    const char *path = "test_core_v2.nmds";
+    CHECK(nmd_state_save(path), "save");
+    setup();
+    CHECK(nmd_state_load(path), "load");
+    m68k_wr16(HW_VDP_DATA, 0x5AA5);                         /* uses the restored latch */
+    CHECK(nmd_vram()[0x1234] == 0x5A, "VDP address latch restored");
+    CHECK(m68k_rd8(HW_IO_CTRL1) == 0x40, "I/O control restored");
+    CHECK((m68k_rd16(HW_Z80_BUSREQ) & 0x0100) == 0, "Z80 bus request restored");
+    remove(path);
+}
+
 int main(void)
 {
     test_ram();
@@ -211,6 +258,8 @@ int main(void)
     test_io();
     test_trace();
     test_state();
+    test_replay();
+    test_state_v2();
     nmd_shutdown();
     if (failures) { fprintf(stderr, "%d failure(s)\n", failures); return 1; }
     printf("test_core: ok\n");
