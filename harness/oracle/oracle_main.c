@@ -168,6 +168,11 @@ int main(int argc, char **argv)
 
     if (state_out && !nmd_state_save(state_out)) { perror(state_out); return 2; }
     if (cov_path && !oracle_write_coverage(cov_path)) { perror(cov_path); return 2; }
+    uint64_t first_lag;
+    uint64_t lags = frames ? oracle_lag_frames(&first_lag) : 0;
+    if (lags)
+        fprintf(stderr, "nmd-oracle: %llu lag frame(s), first at VINT %llu (marked '# lag' in the trace)\n",
+                (unsigned long long)lags, (unsigned long long)first_lag);
     if (ncaptures) fprintf(stderr, "nmd-oracle: %u state(s) captured in %s\n", oracle_captured(), capture_dir);
     nmd_shutdown();
     free(rom);

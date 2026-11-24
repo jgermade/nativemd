@@ -39,6 +39,13 @@ unsigned oracle_captured(void);
 bool oracle_run_frames(uint64_t frames);
 
 /*
+ * Lag frames of the last oracle_run_frames (needs an idle loop): VINTs taken
+ * before the main code had polled the idle loop since the previous VINT. The
+ * engine's timing model has none, so full-run comparisons diverge there.
+ */
+uint64_t oracle_lag_frames(uint64_t *first_vint);
+
+/*
  * Run the original routine at addr from the current machine state and M68K
  * registers until it returns (RTS, or RTE when irq is true); M68K receives
  * the final registers. No interrupts; never diverts into C.

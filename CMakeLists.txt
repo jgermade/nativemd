@@ -70,7 +70,7 @@ target_link_libraries(nmd_compare PUBLIC nativemd)
 target_compile_options(nmd_compare PRIVATE ${NMD_WARNINGS})
 
 # Oracle (Musashi + the engine's hardware), suites and hybrid execution.
-add_library(nmd_harness STATIC harness/oracle/oracle.c harness/suite.c)
+add_library(nmd_harness STATIC harness/oracle/oracle.c harness/suite.c harness/hybrid.c)
 target_include_directories(nmd_harness PUBLIC harness)
 target_link_libraries(nmd_harness PUBLIC nativemd nmd_compare musashi_cpu)
 target_compile_options(nmd_harness PRIVATE ${NMD_WARNINGS})

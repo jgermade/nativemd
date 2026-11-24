@@ -94,6 +94,14 @@ repository ships ROMs or game assets.
   register the engine resolves immediately (e.g. the Z80 BUSREQ grant) may stay a loop.
 - Writes made by main code take effect immediately on engine state, but rendering of the
   whole frame happens at the wait point. Mid-frame effects must come from HINT handlers.
+- **Lag frames are outside the contract** (decided 2026-11-24). When the original's main
+  code runs past a VBlank (long work, or work with interrupts masked), the hardware takes
+  VINT in the middle of it or as soon as the mask is lowered, and games run "lag frame"
+  logic (slowdown). The engine has no elapsed time inside main code, so on nativemd the C
+  never lags: like the Enhanced level, it does not slow down. The oracle marks lag frames
+  (`# lag` in traces) so full-run comparisons can tell them from bugs. Full-run checks of C
+  are made against hybrid runs, which share the engine's timing. (Possible future option:
+  a per-routine cost model to reproduce slowdown.)
 - Behaviour that depends on how long main code takes is outside the contract. Example: an
   interrupt that becomes pending while interrupts are masked during init, and fires when
   `SR` is lowered. A decompilation must reproduce the original's observable result by hand

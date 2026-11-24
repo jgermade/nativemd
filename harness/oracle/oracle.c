@@ -34,6 +34,10 @@ static nmd_trace_line idle_last;
 
 static bool     in_exception;     /* between IACK and the handler's first insn */
 static bool     muted;            /* CPU reset: vector reads are not traced    */
+
+/* Lag frames: a VINT taken before the main code polled the idle loop. */
+static bool     idle_polled;      /* main code read inside the idle loop since the last VINT */
+static uint64_t lag_frames, first_lag_vint;
 static int      irq_depth;        /* interrupt handlers being run             */
 static unsigned irq_levels[16];
 static bool     clr_read_pending;
@@ -107,8 +111,14 @@ static bool parked(unsigned a)
     return a == SENTINEL || a == TRAMPOLINE;
 }
 
+static void note_idle_poll(void)
+{
+    if (frames_mode && in_idle_loop()) idle_polled = true;
+}
+
 unsigned int m68k_read_memory_8(unsigned int a)
 {
+    note_idle_poll();
     uint8_t v = nmd_bus_rd8_raw(a);
     emit(false, 8, a, v);
     return v;
@@ -116,6 +126,7 @@ unsigned int m68k_read_memory_8(unsigned int a)
 
 unsigned int m68k_read_memory_16(unsigned int a)
 {
+    note_idle_poll();
     uint16_t v = nmd_bus_rd16_raw(a);
     emit(false, 16, a, v);
     return v;
@@ -224,7 +235,19 @@ static void update_irq(void)
 
 static int on_int_ack(int level)
 {
-    if (level == 6) { vint_pending = false; vdp_vint_ack(); vint_count++; }
+    if (level == 6) {
+        vint_pending = false;
+        vdp_vint_ack();
+        vint_count++;
+        if (have_idle && irq_depth == 0 && !idle_polled) {
+            if (!lag_frames) first_lag_vint = vint_count;
+            lag_frames++;
+            if (nmd_trace_enabled())
+                nmd_trace_comment("lag VINT %llu (main code at %06X had not reached the idle loop)",
+                                  (unsigned long long)vint_count, m68k_get_reg(NULL, M68K_REG_PC) & 0xFFFFFF);
+        }
+        if (irq_depth == 0) idle_polled = false;
+    }
     if (level == 4) hint_pending = false;
     update_irq();
     in_exception = true; /* drop the vector fetch; stack pushes are dropped by range */
@@ -422,6 +445,12 @@ void oracle_set_capture(const char *dir, unsigned max_per_addr)
 
 unsigned oracle_captured(void) { return captured_total; }
 
+uint64_t oracle_lag_frames(uint64_t *first_vint)
+{
+    if (first_vint) *first_vint = first_lag_vint;
+    return lag_frames;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Frames mode                                                               */
 /* ------------------------------------------------------------------------ */
@@ -439,6 +468,8 @@ bool oracle_run_frames(uint64_t frames)
 {
     frames_mode = true;
     vint_target = frames;
+    idle_polled = false;
+    lag_frames = first_lag_vint = 0;
     divert_to_c = false;
     muted = true;
     m68k_pulse_reset();

@@ -108,6 +108,7 @@ typedef struct reader {
     const char   *name;
     unsigned long lineno;
     char          text[256];
+    char          last_lag[256];  /* last "# lag" marker seen */
 } reader;
 
 static int next_access(reader *r, nmd_trace_line *out, FILE *report)
@@ -117,6 +118,7 @@ static int next_access(reader *r, nmd_trace_line *out, FILE *report)
         int k = nmd_trace_parse(r->text, out);
         r->text[strcspn(r->text, "\r\n")] = 0;
         if (k == 1) return 1;
+        if (k == 0 && strncmp(r->text, "# lag", 5) == 0) snprintf(r->last_lag, sizeof r->last_lag, "%s", r->text + 2);
         if (k < 0) {
             if (report) fprintf(report, "%s:%lu: malformed trace line: %s\n", r->name, r->lineno, r->text);
             return -1;
@@ -152,6 +154,10 @@ int nmd_trace_compare(FILE *ef, const char *en, FILE *af, const char *an, unsign
                     fprintf(report, "    %s\n", ring[(n - i) % ring_n]);
                 fprintf(report, "  expected (%s:%lu): %s\n", en, a.lineno, ka ? a.text : "<end of trace>");
                 fprintf(report, "  actual   (%s:%lu): %s\n", an, b.lineno, kb ? b.text : "<end of trace>");
+                if (a.last_lag[0] || b.last_lag[0])
+                    fprintf(report, "  note: a lag frame precedes this point (%s); the engine's timing has no\n"
+                                    "        lag frames, so a divergence here may be timing, not a bug\n",
+                            a.last_lag[0] ? a.last_lag : b.last_lag);
             }
             result = 1;
             break;
