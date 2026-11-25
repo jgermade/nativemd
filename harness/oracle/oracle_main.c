@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 {
     const char *rom_path = NULL, *trace_path = NULL, *state_in = NULL, *state_out = NULL;
     const char *idle = NULL, *stack = NULL, *cov_path = NULL, *call = NULL, *input = NULL;
-    const char *captures[16];
+    const char *captures[64];
     int ncaptures = 0;
     const char *capture_dir = ".";
     unsigned capture_max = 16, capture_every = 1;
@@ -105,11 +105,17 @@ int main(int argc, char **argv)
         else if (OPT("--state-out"))   state_out = v;
         else if (OPT("--call"))        call = v;
         else if (OPT("--input"))       input = v;
-        else if (OPT("--sym"))         { if (nsyms < 4) syms[nsyms++] = v; }
+        else if (OPT("--sym"))         {
+            if (nsyms == 4) { fprintf(stderr, "nmd-oracle: more than 4 --sym\n"); return 2; }
+            syms[nsyms++] = v;
+        }
         else if (OPT("--idle"))        idle = v;
         else if (OPT("--stack"))       stack = v;
         else if (OPT("--coverage"))    cov_path = v;
-        else if (OPT("--capture"))     { if (ncaptures < 16) captures[ncaptures++] = v; }
+        else if (OPT("--capture"))     {
+            if (ncaptures == 64) { fprintf(stderr, "nmd-oracle: more than 64 --capture\n"); return 2; }
+            captures[ncaptures++] = v;
+        }
         else if (OPT("--capture-dir")) capture_dir = v;
         else if (OPT("--capture-max")) capture_max = (unsigned)strtoul(v, NULL, 10);
         else if (OPT("--capture-every")) capture_every = (unsigned)strtoul(v, NULL, 10);
