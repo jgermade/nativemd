@@ -38,7 +38,9 @@ repository ships ROMs or game assets.
 - Addresses are 24-bit; the top 8 bits are ignored.
 - **16-bit accesses** are the native bus width. 8-bit accesses are separate bus cycles.
 - **32-bit accesses** are two 16-bit accesses, high word first. `MOVE.L` to `-(An)` writes the
-  low word first: use `m68k_wr32_predec`. *(To verify against the oracle per instruction.)*
+  low word first: use `m68k_wr32_predec`. *(Checked against reference emulators for (An),
+  (An)+, -(An), d16(An), abs.l, immediate and register sources: test ROM `movel`; to
+  confirm on hardware.)*
 - **Address errors**: a 16/32-bit access at an odd address is a fatal error. A game that
   deliberately relies on address-error exceptions must handle that case by hand in its C.
 - **Prefetch** is not modelled. Self-modifying code that depends on prefetch must be
@@ -47,17 +49,30 @@ repository ships ROMs or game assets.
   - `CLR` reads before it writes: `m68k_clr8/16/32`. (Musashi omits this read; the oracle
     adds it.)
   - `TAS` performs a locked read-modify-write; on the Mega Drive the write-back does not
-    reach memory. `m68k_tas` performs only the read. *(To verify.)*
+    reach memory. `m68k_tas` performs only the read. *(Checked against reference emulators,
+    value and flags: test ROM `tas`; to confirm on hardware.)*
   - Other read-modify-write instructions to memory (`ADDQ`, `SUBQ`, `OR`, `AND`, `EOR`,
     `NOT`, `NEG`, `BSET`, ...): a read followed by a write, `M68K_RMW8/16/32`.
 - **Reads with side effects** (VDP data and control ports, controller ports, Z80 bus
   status) are real reads: the C must make exactly the reads the original makes, in order,
   including reads whose value is discarded.
-- **Unmapped addresses, writes to ROM without a mapper chip, Z80 space without BUSREQ**:
-  fatal errors. The engine never silently ignores an access the game should not make.
+- **Unmapped addresses, Z80 space without BUSREQ**: fatal errors. The engine never
+  silently ignores an access the game should not make.
+- **Writes to ROM that no cartridge chip claims** (no mapper, SRAM or bank register at that
+  address): no effect, as on hardware without a mapper *(checked against reference
+  emulators for byte, word and long writes: test ROM `romwrite`; to confirm on hardware)*. They are
+  real accesses: traced like any other, so the C must make exactly the ROM writes the
+  original makes (address, value, order). They are not silent: the engine counts them per
+  address with the origin of the first one (`nmd_rom_write_sites`, `nmd_rom_writes_report`)
+  and the tools report them at the end of a run. `nmd_config.rom_writes =
+  NMD_ROM_WRITES_FATAL` (strict mode, `--rom-writes fatal` on the tools) makes them fatal,
+  with the origin and the registers, for chasing corrupt pointers. A chip that claims the
+  address receives the write as before.
 - Byte writes to VDP ports put the byte on both halves of the 16-bit bus.
-- Word accesses to 8-bit devices (Z80 space, I/O) perform one device access.
-  *(To verify.)*
+- Word accesses to 8-bit devices (Z80 space, I/O) perform one device access: a read returns
+  the byte on both halves (Z80 space: the even byte; I/O: the odd register), a write to Z80
+  space stores the high byte. *(Checked against reference emulators: test ROM `busword`;
+  to confirm on hardware.)*
 
 ## 4. Registers and routines by address
 

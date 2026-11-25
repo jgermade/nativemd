@@ -69,4 +69,8 @@ bool oracle_call(uint32_t addr, bool irq, uint64_t max_cycles);
  */
 void oracle_install_hybrid(uint64_t max_cycles_per_slice);
 
+/* "ignore" or "fatal" (the tools' --rom-writes option; nativemd.h, nmd_rom_writes). */
+#include "nativemd/nativemd.h"
+bool oracle_parse_rom_writes(const char *text, nmd_rom_writes *out);
+
 #endif

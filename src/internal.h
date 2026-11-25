@@ -64,6 +64,16 @@ uint16_t nmd_bus_rd16_raw(uint32_t addr);
 void     nmd_bus_wr8_raw(uint32_t addr, uint8_t v);
 void     nmd_bus_wr16_raw(uint32_t addr, uint16_t v);
 
+/*
+ * Origin of an access, for reports and strict-mode errors. The oracle installs a
+ * function that, while Musashi is making a memory access, gives its PC and registers
+ * and returns true. Otherwise the origin is the innermost C routine, kept by
+ * nmd_run_c (every engine and harness entry into C goes through it).
+ */
+typedef bool (*nmd_cpu_origin_fn)(uint32_t *pc, m68k_regs *regs);
+void nmd_set_cpu_origin(nmd_cpu_origin_fn fn);
+void nmd_run_c(uint32_t addr, nmd_routine_fn fn);
+
 /* Ask the missing-routine handler (nativemd.h); false if none ran it. */
 bool nmd_run_missing_routine(uint32_t addr, bool is_interrupt);
 

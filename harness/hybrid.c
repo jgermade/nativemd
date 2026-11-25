@@ -10,6 +10,7 @@
  *                 engine runs the rest of the frame)
  *   --input       pad script, one line per frame: "P1 [P2]" in hex (NMD_PAD_*)
  *   --max-cycles  limit between two waits before giving up (default 50000000)
+ *   --rom-writes  ignore (default; traced and reported at the end) or fatal
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,7 @@
 static void fatal_handler(const char *msg)
 {
     fprintf(stderr, "hybrid: fatal: %s (frame %llu)\n", msg, (unsigned long long)nmd_frame_count());
+    nmd_rom_writes_report(stderr, "nmd-hybrid");
     exit(3);
 }
 
@@ -30,6 +32,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     const char *syms[4];
     int nsyms = 0;
     uint64_t frames = 0, max_cycles = 0;
+    nmd_rom_writes rom_writes = NMD_ROM_WRITES_IGNORE;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if      (!strcmp(a, "--frames") && v)     { frames = strtoull(v, NULL, 10); i++; }
@@ -42,12 +45,16 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         else if (!strcmp(a, "--trace") && v)      { trace_path = v; i++; }
         else if (!strcmp(a, "--state-out") && v)  { state_out = v; i++; }
         else if (!strcmp(a, "--max-cycles") && v) { max_cycles = strtoull(v, NULL, 10); i++; }
+        else if (!strcmp(a, "--rom-writes") && v) {
+            if (!oracle_parse_rom_writes(v, &rom_writes)) { fprintf(stderr, "nmd-hybrid: bad --rom-writes '%s' (ignore|fatal)\n", v); return 2; }
+            i++;
+        }
         else if (a[0] != '-' && !rom_path)        rom_path = a;
         else { fprintf(stderr, "nmd-hybrid: bad argument '%s' (see hybrid_main.c)\n", a); return 2; }
     }
     if (!rom_path || !frames || !idle) {
         fprintf(stderr, "usage: nmd-hybrid ROM --frames N --idle START:END [--sym FILE] [--input FILE] "
-                        "[--trace FILE] [--state-out FILE]\n");
+                        "[--trace FILE] [--state-out FILE] [--max-cycles N] [--rom-writes ignore|fatal]\n");
         return 2;
     }
 
@@ -78,7 +85,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         fclose(in);
     }
     nmd_null_host host = { .script = { pads[0], pads[1] }, .script_len = { npads, npads } };
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .host = nmd_null_host_make(&host) };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .host = nmd_null_host_make(&host), .rom_writes = rom_writes };
     if (!nmd_init(&cfg, game, rom, rom_size)) return 2;
     nmd_set_fatal_handler(fatal_handler);
 
@@ -103,6 +110,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     if (trace) fclose(trace);
     if (state_out && !nmd_state_save(state_out)) { perror(state_out); return 2; }
     printf("%s: %llu frames, %zu routine(s) in C\n", game->name, (unsigned long long)done, game->routine_count);
+    nmd_rom_writes_report(stdout, "nmd-hybrid");
     nmd_shutdown();
     free(rom);
     free(pads[0]);

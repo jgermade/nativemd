@@ -29,10 +29,21 @@ typedef enum nmd_video {
     NMD_VIDEO_PAL  = 1, /* 50 Hz, 313 lines */
 } nmd_video;
 
+/*
+ * 68000 writes to ROM that no cartridge chip claims (contract section 3). On hardware
+ * without a mapper they have no effect (to verify). Either way they are traced as
+ * ordinary accesses.
+ */
+typedef enum nmd_rom_writes {
+    NMD_ROM_WRITES_IGNORE = 0, /* no effect; counted (nmd_rom_write_sites) */
+    NMD_ROM_WRITES_FATAL  = 1, /* strict: fatal, with the origin and the registers */
+} nmd_rom_writes;
+
 typedef struct nmd_config {
-    nmd_video video;
-    bool      overseas;   /* version register bit 7 */
-    nmd_host  host;
+    nmd_video      video;
+    bool           overseas;   /* version register bit 7 */
+    nmd_host       host;
+    nmd_rom_writes rom_writes;
 } nmd_config;
 
 /*
@@ -129,6 +140,32 @@ void nmd_set_missing_routine_handler(nmd_missing_routine_handler handler);
 bool   nmd_replay_open(FILE *recorded_trace);
 void   nmd_replay_close(void);
 size_t nmd_replay_remaining(void);
+
+/*
+ * Ignored ROM writes (NMD_ROM_WRITES_IGNORE), one site per address, in order of first
+ * write. The origin of the first write is the 68000 PC of the instruction when the
+ * oracle CPU made it, or the innermost C routine's address when C made it. Cleared by
+ * nmd_init() and nmd_rom_writes_clear(). Addresses beyond NMD_MAX_ROM_WRITE_SITES are
+ * counted together in *other (never dropped).
+ */
+#define NMD_MAX_ROM_WRITE_SITES 256
+
+typedef struct nmd_rom_write_site {
+    uint32_t addr;
+    uint64_t count;
+    unsigned first_bits;    /* 8 or 16 */
+    uint16_t first_value;
+    bool     first_from_c;  /* origin: C routine address, else 68000 PC */
+    bool     first_known;   /* false: neither (e.g. a write outside any routine) */
+    uint32_t first_origin;
+} nmd_rom_write_site;
+
+size_t   nmd_rom_write_sites(const nmd_rom_write_site **sites, uint64_t *other);
+uint64_t nmd_rom_write_total(void);
+void     nmd_rom_writes_clear(void);
+/* Prints "who: N ignored ROM write(s) at M address(es)" and one line per site; nothing
+ * when there were none. */
+void     nmd_rom_writes_report(FILE *f, const char *who);
 
 #ifdef __cplusplus
 }

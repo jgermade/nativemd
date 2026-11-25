@@ -6,7 +6,8 @@
  * the C on the engine, then compares traces and final states.
  *
  * Usage: SUITE ROM --call ADDR|LABEL [--irq] [--sym FILE] [--regs LIST]
- *              [--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [--coverage FILE] [-v] STATE...
+ *              [--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [--coverage FILE]
+ *              [--rom-writes ignore|fatal] [-v] STATE...
  *
  *   --irq         the routine is an interrupt handler (ends in RTE)
  *   --regs        output registers to compare, e.g. d0,a1,ccr
@@ -17,6 +18,8 @@
  *   --keep DIR    write expected/actual traces of failing states there
  *   --coverage FILE  instruction addresses the oracle executed over all states (the
  *                 routine and everything it calls), as nmd-oracle --coverage writes them
+ *   --rom-writes  writes to ROM that no mapper claims: ignore (default; traced, so they
+ *                 are compared, and reported per state and at the end) or fatal
  *
  * Exit status: 0 if every state passes, 1 otherwise, 2 on usage errors.
  */

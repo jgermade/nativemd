@@ -70,6 +70,11 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
 - **Corrections to Musashi**: `CLR` to memory performs its read cycle (Musashi omits it;
   the 68000 does it). `TAS` does not write back (Mega Drive bus).
 - `--coverage FILE` lists executed instruction addresses, for `nmd-disasm --coverage`.
+- **ROM writes** that no mapper claims (contract section 3) have no effect and are traced;
+  at the end of a run the oracle, `nmd-hybrid` and the suites print how many there were,
+  per address, with the origin of the first one: the 68000 PC when original code made it,
+  the innermost C routine when C did. `--rom-writes fatal` (all three tools) makes them
+  fatal instead, with the origin and the registers.
 - `--capture ADDR` (repeatable, by label or address) saves a state file every time the PC
   reaches ADDR, up to `--capture-max` per address, into `--capture-dir`. This is how real
   input states for a routine are collected while the game runs.
@@ -83,7 +88,10 @@ and hybrid execution.
 state file it runs the routine on the oracle and the C on the engine **in the same
 process**, then compares the traces and the final states (RAM, VRAM, CRAM, VSRAM, VDP
 registers, Z80 RAM, latches; the stack range is skipped; `--regs` adds output registers).
-`--keep DIR` writes both traces of a failing state. `--replay` feeds the oracle's device
+`--keep DIR` writes both traces of a failing state. A state where either side wrote to ROM
+prints `ignored ROM writes: oracle N, C M`; the end of the run lists the addresses per side
+(with the state of the first write). Being in the traces, a ROM write only one side makes
+fails the state at its exact position. `--replay` feeds the oracle's device
 reads to the C (below). Fatal errors on either side fail that state and the suite goes on.
 `--coverage FILE` writes the instruction addresses the oracle executed over all the states
 (the original routine and everything it calls), in the format of `nmd-oracle --coverage`:
@@ -138,6 +146,27 @@ must match the full-oracle trace and state.
 Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exact
 `MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
 references (hardware, FX68K).
+
+## Reference emulators
+
+The oracle and the C share nativemd's hardware model, so a mistake in that model would pass
+every suite. The contract's hardware facts are therefore checked separately, with small test
+ROMs (sources kept with the game clients, outside this repository) run on nativemd and on
+reference emulators:
+
+- `tools/refemu/fetch_cores.sh` fetches Genesis Plus GX and BlastEm (libretro cores, at
+  pinned commits) into `work/refemu` and builds them with `refemu`, a minimal libretro
+  runner (ours): it runs a ROM for N frames with no input and dumps the 68000 RAM. No
+  emulator code is part of nativemd.
+- `tools/refemu/run.sh TEST_ROMS_DIR` builds the test ROMs, runs each on `nmd-oracle` and
+  on both cores, and compares the result blocks (`tools/refemu/results.py`): every check
+  must give the contract's expected value on every machine.
+- A test ROM writes its checks (observed and expected words) at $FF0000 and turns the
+  background green when they all match the contract, red otherwise, so the same ROM can be
+  run on a MiSTer or a console. Emulators are a second reference, not ground truth:
+  hardware runs settle what the emulators disagree on.
+- Each test includes a control where it matters (the opposite order of a `MOVE.L`, a byte
+  that must differ), so a test that cannot tell the cases apart fails instead of passing.
 
 ## Tools
 

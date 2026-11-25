@@ -142,11 +142,13 @@ int main(int argc, char **argv)
             have_sweep = true;
             i++;
         } else if (!strcmp(a, "--rand") && v) {
-            if (nrnd >= 16 || !parse_field(v, &rnd[nrnd], true)) { fprintf(stderr, "bad --rand %s\n", v); return 2; }
+            if (nrnd >= 16) { fprintf(stderr, "more than 16 --rand (at %s)\n", v); return 2; }
+            if (!parse_field(v, &rnd[nrnd], true)) { fprintf(stderr, "bad --rand %s\n", v); return 2; }
             nrnd++;
             i++;
         } else if (!strcmp(a, "--value") && v) {
-            if (nfixed >= 16 || !parse_field(v, &fixed[nfixed], false)) { fprintf(stderr, "bad --value %s\n", v); return 2; }
+            if (nfixed >= 16) { fprintf(stderr, "more than 16 --value (at %s)\n", v); return 2; }
+            if (!parse_field(v, &fixed[nfixed], false)) { fprintf(stderr, "bad --value %s\n", v); return 2; }
             nfixed++;
             i++;
         } else if (a[0] != '-' && !base) base = a;

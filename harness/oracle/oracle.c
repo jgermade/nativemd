@@ -192,18 +192,37 @@ static void clr_read(unsigned int a, unsigned bits)
     else (void)m68k_read_memory_32(a);
 }
 
+/* True while Musashi's write reaches the bus: ROM-write reports name its PC. */
+static bool cpu_writing;
+
+static bool cpu_origin(uint32_t *pc, m68k_regs *r)
+{
+    if (!cpu_writing) return false;
+    *pc = m68k_get_reg(NULL, M68K_REG_PPC) & 0xFFFFFF;
+    for (int i = 0; i < 8; i++) {
+        r->d[i] = m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_D0 + i));
+        r->a[i] = m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_A0 + i));
+    }
+    r->sr = (uint16_t)m68k_get_reg(NULL, M68K_REG_SR);
+    return true;
+}
+
 void m68k_write_memory_8(unsigned int a, unsigned int v)
 {
     clr_read(a, 8);
     emit(true, 8, a, v & 0xFF);
+    cpu_writing = true;
     nmd_bus_wr8_raw(a, (uint8_t)v);
+    cpu_writing = false;
 }
 
 void m68k_write_memory_16(unsigned int a, unsigned int v)
 {
     clr_read(a, 16);
     emit(true, 16, a, v & 0xFFFF);
+    cpu_writing = true;
     nmd_bus_wr16_raw(a, (uint16_t)v);
+    cpu_writing = false;
 }
 
 /* High word first (contract: to verify per addressing mode). */
@@ -374,6 +393,8 @@ void oracle_setup(void)
     min_sp = stack_top;
     have_idle = idle_have_last = in_exception = clr_read_pending = false;
     irq_depth = 0;
+    cpu_writing = false;
+    nmd_set_cpu_origin(cpu_origin);
     frames_mode = hint_pending = vint_pending = false;
     vint_count = vint_target = 0;
     pending_action = ACT_NONE;
@@ -608,7 +629,7 @@ static bool run_routine(uint32_t addr, bool irq, uint64_t max_cycles, bool diver
             nmd_routine_fn fn = find_routine(at);
             regs_to_engine();
             if (nmd_trace_enabled()) nmd_trace_comment("asm->c %06X", at);
-            fn();
+            nmd_run_c(at, fn);
             regs_from_engine();
             /* The C returns as by RTS. */
             uint32_t a7 = (uint32_t)m68k_get_reg(NULL, M68K_REG_A7);
@@ -651,6 +672,14 @@ static bool hybrid_handler(uint32_t addr, bool is_interrupt)
 {
     if (nmd_trace_enabled()) nmd_trace_comment("c->asm %06X", addr);
     return run_routine(addr, is_interrupt, hybrid_max_cycles, true);
+}
+
+bool oracle_parse_rom_writes(const char *text, nmd_rom_writes *out)
+{
+    if (!text) return false;
+    if (!strcmp(text, "ignore")) { *out = NMD_ROM_WRITES_IGNORE; return true; }
+    if (!strcmp(text, "fatal"))  { *out = NMD_ROM_WRITES_FATAL;  return true; }
+    return false;
 }
 
 void oracle_install_hybrid(uint64_t max_cycles_per_slice)
