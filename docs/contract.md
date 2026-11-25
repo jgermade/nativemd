@@ -53,8 +53,17 @@ repository ships ROMs or game assets.
 - **Reads with side effects** (VDP data and control ports, controller ports, Z80 bus
   status) are real reads: the C must make exactly the reads the original makes, in order,
   including reads whose value is discarded.
-- **Unmapped addresses, writes to ROM without a mapper chip, Z80 space without BUSREQ**:
-  fatal errors. The engine never silently ignores an access the game should not make.
+- **Unmapped addresses, Z80 space without BUSREQ**: fatal errors. The engine never
+  silently ignores an access the game should not make.
+- **Writes to ROM that no cartridge chip claims** (no mapper, SRAM or bank register at that
+  address): no effect, as on hardware without a mapper *(to verify on hardware)*. They are
+  real accesses: traced like any other, so the C must make exactly the ROM writes the
+  original makes (address, value, order). They are not silent: the engine counts them per
+  address with the origin of the first one (`nmd_rom_write_sites`, `nmd_rom_writes_report`)
+  and the tools report them at the end of a run. `nmd_config.rom_writes =
+  NMD_ROM_WRITES_FATAL` (strict mode, `--rom-writes fatal` on the tools) makes them fatal,
+  with the origin and the registers, for chasing corrupt pointers. A chip that claims the
+  address receives the write as before.
 - Byte writes to VDP ports put the byte on both halves of the 16-bit bus.
 - Word accesses to 8-bit devices (Z80 space, I/O) perform one device access.
   *(To verify.)*

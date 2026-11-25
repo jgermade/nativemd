@@ -70,6 +70,11 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
 - **Corrections to Musashi**: `CLR` to memory performs its read cycle (Musashi omits it;
   the 68000 does it). `TAS` does not write back (Mega Drive bus).
 - `--coverage FILE` lists executed instruction addresses, for `nmd-disasm --coverage`.
+- **ROM writes** that no mapper claims (contract section 3) have no effect and are traced;
+  at the end of a run the oracle, `nmd-hybrid` and the suites print how many there were,
+  per address, with the origin of the first one: the 68000 PC when original code made it,
+  the innermost C routine when C did. `--rom-writes fatal` (all three tools) makes them
+  fatal instead, with the origin and the registers.
 - `--capture ADDR` (repeatable, by label or address) saves a state file every time the PC
   reaches ADDR, up to `--capture-max` per address, into `--capture-dir`. This is how real
   input states for a routine are collected while the game runs.
@@ -83,7 +88,10 @@ and hybrid execution.
 state file it runs the routine on the oracle and the C on the engine **in the same
 process**, then compares the traces and the final states (RAM, VRAM, CRAM, VSRAM, VDP
 registers, Z80 RAM, latches; the stack range is skipped; `--regs` adds output registers).
-`--keep DIR` writes both traces of a failing state. `--replay` feeds the oracle's device
+`--keep DIR` writes both traces of a failing state. A state where either side wrote to ROM
+prints `ignored ROM writes: oracle N, C M`; the end of the run lists the addresses per side
+(with the state of the first write). Being in the traces, a ROM write only one side makes
+fails the state at its exact position. `--replay` feeds the oracle's device
 reads to the C (below). Fatal errors on either side fail that state and the suite goes on.
 `--coverage FILE` writes the instruction addresses the oracle executed over all the states
 (the original routine and everything it calls), in the format of `nmd-oracle --coverage`:

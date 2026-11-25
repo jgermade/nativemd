@@ -67,6 +67,7 @@ bool nmd_init(const nmd_config *cfg, const nmd_game *game, const uint8_t *rom, s
     memcpy(NMD.rom, rom, rom_size);
     NMD.rom_size = rom_size;
     NMD.cfg = *cfg;
+    nmd_rom_writes_clear();
     NMD.game = game;
     for (size_t i = 0; i < game->chip_count; i++) NMD.chips[i] = game->chips[i];
     NMD.chip_count = game->chip_count;
@@ -112,7 +113,7 @@ static bool take_interrupt(unsigned level, uint32_t vector)
     m68k_regs saved = M68K;
     M68K.sr = (uint16_t)((M68K.sr & ~M68K_SR_IMASK) | (level << 8) | M68K_SR_S);
     if (nmd_trace_enabled()) nmd_trace_comment("irq %u %06X", level, handler);
-    if (fn) fn();
+    if (fn) nmd_run_c(handler, fn);
     else if (!nmd_run_missing_routine(handler, true))
         nmd_fatal("interrupt level %u: no C for handler %06X (vector %03X)", level, handler, vector);
     if (nmd_trace_enabled()) nmd_trace_comment("rte %u", level);
@@ -130,7 +131,7 @@ static void game_entry(void)
 {
     uint32_t pc = be32(NMD.rom + HW_VEC_RESET) & 0xFFFFFF;
     nmd_routine_fn fn = find_routine(pc);
-    if (fn) fn();
+    if (fn) nmd_run_c(pc, fn);
     else if (!nmd_run_missing_routine(pc, false)) nmd_fatal("reset: no C for reset PC %06X", pc);
 }
 

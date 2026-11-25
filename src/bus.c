@@ -67,6 +67,89 @@ static uint32_t replayed(uint32_t addr, unsigned bits, uint32_t actual)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Origin of accesses; ROM writes without a mapper                           */
+/* ------------------------------------------------------------------------ */
+
+static nmd_cpu_origin_fn cpu_origin;
+static uint32_t          c_routine;      /* innermost C routine, if c_depth > 0 */
+static unsigned          c_depth;
+
+void nmd_set_cpu_origin(nmd_cpu_origin_fn fn) { cpu_origin = fn; }
+
+void nmd_run_c(uint32_t addr, nmd_routine_fn fn)
+{
+    uint32_t outer = c_routine;
+    c_routine = addr & 0xFFFFFF;
+    c_depth++;
+    fn();
+    c_depth--;
+    c_routine = outer;
+}
+
+static nmd_rom_write_site rom_sites[NMD_MAX_ROM_WRITE_SITES];
+static size_t             rom_nsites;
+static uint64_t           rom_other, rom_total;
+
+size_t nmd_rom_write_sites(const nmd_rom_write_site **sites, uint64_t *other)
+{
+    if (sites) *sites = rom_sites;
+    if (other) *other = rom_other;
+    return rom_nsites;
+}
+
+uint64_t nmd_rom_write_total(void) { return rom_total; }
+
+void nmd_rom_writes_clear(void) { rom_nsites = 0; rom_other = rom_total = 0; }
+
+void nmd_rom_writes_report(FILE *f, const char *who)
+{
+    if (!rom_total) return;
+    fprintf(f, "%s: %llu ignored ROM write(s) at %zu address(es)%s\n", who,
+            (unsigned long long)rom_total, rom_nsites, rom_other ? " and more" : "");
+    for (size_t i = 0; i < rom_nsites; i++) {
+        const nmd_rom_write_site *r = &rom_sites[i];
+        fprintf(f, "  %06X x%llu, first write%u %0*X from ", r->addr, (unsigned long long)r->count,
+                r->first_bits, r->first_bits / 4, r->first_value);
+        if (!r->first_known)      fprintf(f, "unknown origin\n");
+        else if (r->first_from_c) fprintf(f, "C routine %06X\n", r->first_origin);
+        else                      fprintf(f, "PC %06X\n", r->first_origin);
+    }
+    if (rom_other)
+        fprintf(f, "  %llu more write(s) at addresses beyond the first %d\n",
+                (unsigned long long)rom_other, NMD_MAX_ROM_WRITE_SITES);
+}
+
+static void rom_write(unsigned bits, uint32_t addr, uint16_t v)
+{
+    uint32_t pc = 0;
+    m68k_regs r = M68K;
+    bool from_cpu = cpu_origin && cpu_origin(&pc, &r);
+    bool known = from_cpu || c_depth > 0;
+    if (!from_cpu) pc = c_routine;
+
+    if (NMD.cfg.rom_writes == NMD_ROM_WRITES_FATAL) {
+        char origin[48];
+        if (from_cpu)   snprintf(origin, sizeof origin, "PC %06X", pc);
+        else if (known) snprintf(origin, sizeof origin, "C routine %06X", pc);
+        else            snprintf(origin, sizeof origin, "unknown origin");
+        nmd_fatal("68k write%u to ROM %06X <- %0*X (no mapper chip claims it; strict ROM writes) from %s; "
+                  "D0-D7 %08X %08X %08X %08X %08X %08X %08X %08X "
+                  "A0-A7 %08X %08X %08X %08X %08X %08X %08X %08X SR %04X",
+                  bits, addr, (int)bits / 4, v, origin,
+                  r.d[0], r.d[1], r.d[2], r.d[3], r.d[4], r.d[5], r.d[6], r.d[7],
+                  r.a[0], r.a[1], r.a[2], r.a[3], r.a[4], r.a[5], r.a[6], r.a[7], r.sr);
+    }
+    rom_total++;
+    for (size_t i = 0; i < rom_nsites; i++)
+        if (rom_sites[i].addr == addr) { rom_sites[i].count++; return; }
+    if (rom_nsites == NMD_MAX_ROM_WRITE_SITES) { rom_other++; return; }
+    rom_sites[rom_nsites++] = (nmd_rom_write_site){
+        .addr = addr, .count = 1, .first_bits = bits, .first_value = v,
+        .first_from_c = !from_cpu && known, .first_known = known, .first_origin = pc,
+    };
+}
+
+/* ------------------------------------------------------------------------ */
 
 static const nmd_chip *find_chip(uint32_t addr)
 {
@@ -170,7 +253,7 @@ static void bus_wr8(uint32_t addr, uint8_t v)
         return;
     }
     if (addr == HW_Z80_BUSREQ + 1 || addr == HW_Z80_RESET + 1) return; /* ignored half */
-    if (addr <= HW_ROM_END) nmd_fatal("68k write8 to ROM %06X <- %02X (no mapper chip claims it)", addr, v);
+    if (addr <= HW_ROM_END) { rom_write(8, addr, v); return; }
     nmd_fatal("68k write8 to unmapped address %06X <- %02X", addr, v);
 }
 
@@ -196,7 +279,7 @@ static void bus_wr16(uint32_t addr, uint16_t v)
     /* 8-bit devices: one device write (Z80 space: high byte; I/O: low byte). */
     if (addr >= HW_Z80_START && addr <= HW_Z80_END) { bus_wr8(addr, (uint8_t)(v >> 8)); return; }
     if (addr >= 0xA10000 && addr <= 0xA1001F)       { bus_wr8(addr + 1, (uint8_t)v);    return; }
-    if (addr <= HW_ROM_END) nmd_fatal("68k write16 to ROM %06X <- %04X (no mapper chip claims it)", addr, v);
+    if (addr <= HW_ROM_END) { rom_write(16, addr, v); return; }
     nmd_fatal("68k write16 to unmapped address %06X <- %04X", addr, v);
 }
 
@@ -297,7 +380,7 @@ void call_routine(uint32_t addr)
         nmd_fatal("call_routine: no C for 68k address %06X", addr);
     }
     if (nmd_trace_enabled()) nmd_trace_comment("call %06X %s", addr, routine_name(addr));
-    fn();
+    nmd_run_c(addr, fn);
     if (nmd_trace_enabled()) nmd_trace_comment("ret %06X", addr);
 }
 
@@ -310,5 +393,5 @@ void jump_routine(uint32_t addr)
         nmd_fatal("jump_routine: no C for 68k address %06X", addr);
     }
     if (nmd_trace_enabled()) nmd_trace_comment("jump %06X %s", addr, routine_name(addr));
-    fn();
+    nmd_run_c(addr, fn);
 }

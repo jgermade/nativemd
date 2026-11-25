@@ -31,8 +31,9 @@ static void on_fatal(const char *msg)
     } while (0)
 
 static void dummy(void) {}
-static const nmd_routine routines[] = { { 0x000200, dummy, "Dummy" } };
-static const nmd_game game = { .name = "core", .routines = routines, .routine_count = 1 };
+static void rom_writer(void) { m68k_wr8(0x000123, 0x5A); } /* test_rom_writes */
+static const nmd_routine routines[] = { { 0x000200, dummy, "Dummy" }, { 0x000400, rom_writer, "RomWriter" } };
+static const nmd_game game = { .name = "core", .routines = routines, .routine_count = 2 };
 
 static uint8_t rom[0x1000];
 
@@ -71,12 +72,52 @@ static void test_fatal(void)
     nmd_set_fatal_handler(on_fatal);
     EXPECT_FATAL(m68k_rd16(0xFF0001));
     CHECK(strstr(fatal_msg, "odd") != NULL, "odd-address message: %s", fatal_msg);
-    EXPECT_FATAL(m68k_wr16(0x000100, 0));
     EXPECT_FATAL(m68k_rd16(0x400000));
     EXPECT_FATAL(m68k_rd8(0x002000)); /* beyond the 4 KB test ROM */
     EXPECT_FATAL(m68k_wr8(0xA00000, 1)); /* Z80 RAM without BUSREQ */
     EXPECT_FATAL(call_routine(0x000300));
     CHECK(strstr(fatal_msg, "000300") != NULL, "missing routine message: %s", fatal_msg);
+    nmd_set_fatal_handler(NULL);
+}
+
+/* ROM writes without a mapper: no effect, traced, counted; fatal in strict mode. */
+static void test_rom_writes(void)
+{
+    setup();
+    char *buf = NULL;
+    size_t len = 0;
+    FILE *mem = open_memstream(&buf, &len);
+    nmd_trace_open(mem);
+    m68k_wr16(0x000100, 0xBEEF);
+    m68k_wr16(0x000100, 0x0001);
+    call_routine(0x000400);
+    nmd_trace_open(NULL);
+    fclose(mem);
+    CHECK(memcmp(nmd_rom(NULL) + 0x100, "SE", 2) == 0, "ROM unchanged by a write");
+    CHECK(buf && strstr(buf, "000100") && strstr(buf, "BEEF") && strstr(buf, "000123"),
+          "ROM writes traced: %s", buf ? buf : "(none)");
+    free(buf);
+    const nmd_rom_write_site *sites;
+    uint64_t other;
+    size_t n = nmd_rom_write_sites(&sites, &other);
+    CHECK(n == 2 && other == 0 && nmd_rom_write_total() == 3, "ROM write sites %zu, total %llu",
+          n, (unsigned long long)nmd_rom_write_total());
+    if (n == 2) {
+        CHECK(sites[0].addr == 0x100 && sites[0].count == 2 && sites[0].first_bits == 16 &&
+              sites[0].first_value == 0xBEEF && !sites[0].first_known, "first site");
+        CHECK(sites[1].addr == 0x123 && sites[1].count == 1 && sites[1].first_from_c &&
+              sites[1].first_known && sites[1].first_origin == 0x400, "site written by C");
+    }
+    setup();
+    CHECK(nmd_rom_write_total() == 0, "nmd_init clears the ROM write table");
+
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = NMD_ROM_WRITES_FATAL };
+    if (!nmd_init(&cfg, &game, rom, sizeof rom)) exit(2);
+    nmd_set_fatal_handler(on_fatal);
+    M68K.d[3] = 0x12345678;
+    EXPECT_FATAL(call_routine(0x000400));
+    CHECK(strstr(fatal_msg, "000123") && strstr(fatal_msg, "C routine 000400") && strstr(fatal_msg, "12345678"),
+          "strict message: %s", fatal_msg);
     nmd_set_fatal_handler(NULL);
 }
 
@@ -254,6 +295,7 @@ int main(void)
 {
     test_ram();
     test_fatal();
+    test_rom_writes();
     test_vdp();
     test_io();
     test_trace();
