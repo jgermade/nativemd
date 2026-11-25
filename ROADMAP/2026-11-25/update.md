@@ -27,13 +27,11 @@ Supersedes the "Where we are" and "Next" of `overview.md` (same date). History:
   without C, and (new) a coverage report of the original code its states execute.
 - Harness filters and limits must be proven not to hide data; limits fail loudly.
 
-## Open decision
+## Decided, to implement first in the next session
 
-- **ROM writes.** Sonic 1's SolidObject (FixBugs = 0) writes through a1, which holds the
-  object's code address when an object is off screen and pushed: a 16-bit write into ROM.
-  Hardware is believed to ignore it (to verify on a MiSTer / real console); the engine
-  treats it as fatal. Options: ignore ROM writes without a mapper (and trace them), or keep
-  them fatal and let clients avoid them.
+- **ROM writes without a mapper**: ignored as on hardware (to verify), always traced (so
+  comparisons still check them), reported at the end of a run, fatal only in a strict mode.
+  Details and plan: `RECORD/2026-11-25.rom-writes.WIP.md`.
 
 ## Next
 
@@ -54,7 +52,7 @@ gantt
     Rest of Sonic's object                      :s1, 2026-11-26, 10d
     Level loop, other zones                     :s2, after s1, 30d
     section Engine
-    ROM-write decision                          :e0, 2026-11-26, 1d
+    ROM writes: ignore, trace, report           :e0, 2026-11-26, 1d
     Suite run time, stack-filter test ROM       :e1, 2026-11-26, 3d
     VDP line renderer + frame dumps             :e2, after e1, 21d
     Hardware test ROMs (+ MiSTer runs)          :e3, after e1, 10d
