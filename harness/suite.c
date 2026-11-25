@@ -46,6 +46,7 @@ typedef struct suite {
     uint32_t        addr;
     bool            irq, replay, verbose, hybrid;
     const char     *keep;
+    const char     *coverage;   /* --coverage FILE: original code the oracle runs, all states */
     const char     *syms[4];
     int             nsyms;
     nmd_cmp_opts    cmp;
@@ -187,6 +188,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
             i++;
         }
         else if (!strcmp(a, "--keep") && v)       { s.keep = v; i++; }
+        else if (!strcmp(a, "--coverage") && v)   { s.coverage = v; i++; }
         else if (!strcmp(a, "--irq"))             s.irq = true;
         else if (!strcmp(a, "--replay"))          s.replay = true;
         else if (!strcmp(a, "--hybrid"))          s.hybrid = true;
@@ -197,7 +199,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
     }
     if (!rom_path || !call || !nstates) {
         fprintf(stderr, "usage: %s ROM --call ADDR [--irq] [--sym FILE] [--regs LIST] "
-                        "[--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] STATE...\n", argv[0]);
+                        "[--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [--coverage FILE] STATE...\n", argv[0]);
         return 2;
     }
     uint8_t *rom = read_file(rom_path, &s.rom_size);
@@ -211,9 +213,11 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
         if (!oracle_load_syms(s.syms[i])) { perror(s.syms[i]); return 2; }
     if (!oracle_resolve(call, &s.addr, NULL, NULL)) { fprintf(stderr, "unknown routine %s\n", call); return 2; }
     if (!find_routine(s.addr)) { fprintf(stderr, "no C for routine %06X in %s\n", s.addr, game->name); return 2; }
+    if (s.coverage) oracle_enable_coverage();   /* kept across the per-state oracle runs */
 
     int passed = 0;
     for (int i = 0; i < nstates; i++) passed += check_state(&s, states[i]);
+    if (s.coverage && !oracle_write_coverage(s.coverage)) perror(s.coverage);
     nmd_set_fatal_handler(NULL);
     nmd_shutdown();
     free(rom);

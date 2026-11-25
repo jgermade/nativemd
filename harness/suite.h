@@ -6,7 +6,7 @@
  * the C on the engine, then compares traces and final states.
  *
  * Usage: SUITE ROM --call ADDR|LABEL [--irq] [--sym FILE] [--regs LIST]
- *              [--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [-v] STATE...
+ *              [--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [--coverage FILE] [-v] STATE...
  *
  *   --irq         the routine is an interrupt handler (ends in RTE)
  *   --regs        output registers to compare, e.g. d0,a1,ccr
@@ -15,6 +15,8 @@
  *   --hybrid      routines the C calls that have no C yet run as original code
  *                 (the routine under test is still C)
  *   --keep DIR    write expected/actual traces of failing states there
+ *   --coverage FILE  instruction addresses the oracle executed over all states (the
+ *                 routine and everything it calls), as nmd-oracle --coverage writes them
  *
  * Exit status: 0 if every state passes, 1 otherwise, 2 on usage errors.
  */

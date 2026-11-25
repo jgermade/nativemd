@@ -85,6 +85,9 @@ process**, then compares the traces and the final states (RAM, VRAM, CRAM, VSRAM
 registers, Z80 RAM, latches; the stack range is skipped; `--regs` adds output registers).
 `--keep DIR` writes both traces of a failing state. `--replay` feeds the oracle's device
 reads to the C (below). Fatal errors on either side fail that state and the suite goes on.
+`--coverage FILE` writes the instruction addresses the oracle executed over all the states
+(the original routine and everything it calls), in the format of `nmd-oracle --coverage`:
+instructions of the routine that no state reaches are paths the suite does not check.
 
 The hello suites cover `VInt` and `HInt` (interrupt handlers, `--irq`) and `ReadPad` (a
 register ABI: result in `d0`). A deliberately wrong C (`HELLO_BUG`) must make the suite
