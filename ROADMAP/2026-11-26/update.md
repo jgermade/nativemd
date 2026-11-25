@@ -16,7 +16,7 @@ Supersedes `ROADMAP/2026-11-25/update.md`. History: `RECORD/2026-11-25.rom-write
 
 1. **Suite size**: the client has suites near the 4096-state limit of `nmd_suite_main`;
    raise it (allocated list) keeping a loud failure for a real limit.
-2. **Hardware facts**: test ROMs (`test-roms` repository) checked against reference
+2. **Hardware facts**: test ROMs (kept in the private client repository) checked against reference
    emulators (Genesis Plus GX, BlastEm) that nativemd runs itself (`tools/refemu`); the four
    facts of contract section 3 agree on all machines. Next: VDP and timing facts as the
    renderer needs them; MiSTer / console runs of the same ROMs (green / red screen) for what

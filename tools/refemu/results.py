@@ -4,7 +4,7 @@
 Usage: results.py NAME=FILE...
   FILE is a 64 KB RAM dump (refemu) or an nmd-oracle state file (.nmds). The test ROM's
   result block at $FF0000 ('NMDT', checks, mismatches, then observed / expected word
-  pairs; test-roms/common/start.asm) is read from each.
+  pairs, as the test ROMs' common frame writes it) is read from each.
 Prints one line per check: the expected (contract) value and each machine's observed value,
 marking disagreements. Exit status: 0 if every machine observed the expected values, 1 if
 any check differs anywhere, 2 on errors.

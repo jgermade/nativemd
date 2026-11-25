@@ -151,7 +151,8 @@ references (hardware, FX68K).
 
 The oracle and the C share nativemd's hardware model, so a mistake in that model would pass
 every suite. The contract's hardware facts are therefore checked separately, with small test
-ROMs (the `test-roms` repository) run on nativemd and on reference emulators:
+ROMs (sources kept with the game clients, outside this repository) run on nativemd and on
+reference emulators:
 
 - `tools/refemu/fetch_cores.sh` fetches Genesis Plus GX and BlastEm (libretro cores, at
   pinned commits) into `work/refemu` and builds them with `refemu`, a minimal libretro

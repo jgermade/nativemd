@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Run every test ROM of a test-roms checkout on nativemd (nmd-oracle: the original code on
+# Run every test ROM of a test ROM directory on nativemd (nmd-oracle: the original code on
 # nativemd's hardware model) and on the reference emulators, and compare their results with
 # each other and with the contract's expected values (tools/refemu/results.py).
 #
 # Usage: tools/refemu/run.sh TEST_ROMS_DIR [FRAMES]
-#   Needs a build of nativemd in build/ (nmd-oracle), fetch_cores.sh run once, and AS and
-#   p2bin for test-roms/build.sh (ASL=... P2BIN=...). Exit status 1 if any check differs.
+#   TEST_ROMS_DIR has a build.sh that assembles its ROMs into TEST_ROMS_DIR/build/*.bin.
+#   Needs nmd-oracle (build/, or ORACLE=...) and fetch_cores.sh run once (same WORK).
+#   Exit status 1 if any check differs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 W="${WORK:-$ROOT/work}/refemu"
