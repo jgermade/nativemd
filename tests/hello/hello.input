@@ -1,0 +1,6 @@
+# Pad script for the hello tests: one line per frame, "PORT1 [PORT2]" in hex (NMD_PAD_*).
+# START (0x80) is held on port 1 from frame 3.
+0
+0
+0
+80
