@@ -33,6 +33,8 @@ bool oracle_write_coverage(const char *path);
  * DIR/NAME.NNNN.nmds. */
 bool oracle_add_capture(uint32_t addr, const char *name);
 void oracle_set_capture(const char *dir, unsigned max_per_addr);
+/* Keep only every N-th hit of each address (spreads samples over a long run). */
+void oracle_set_capture_every(unsigned every);
 unsigned oracle_captured(void);
 
 /* Reset and run with NTSC line timing until the RTE of the N-th VINT. */

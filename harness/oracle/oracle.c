@@ -65,10 +65,10 @@ static uint8_t *coverage;
 static size_t   coverage_words;
 
 #define MAX_CAPTURES 16
-static struct { uint32_t addr; char name[64]; unsigned count; } captures[MAX_CAPTURES];
+static struct { uint32_t addr; char name[64]; unsigned count; uint64_t hits; } captures[MAX_CAPTURES];
 static size_t   ncaptures;
 static char     capture_dir[512] = ".";
-static unsigned capture_max = 16, captured_total;
+static unsigned capture_max = 16, capture_every = 1, captured_total;
 
 typedef struct sym { uint32_t addr; char name[64]; } sym;
 static sym     *syms;
@@ -310,7 +310,8 @@ static void on_instr(unsigned int pc)
     if (have_idle && irq_depth == 0 && !in_idle) idle_have_last = false;
     if (coverage && pc / 2 < coverage_words) coverage[pc / 2] = 1;
     for (size_t i = 0; i < ncaptures; i++)
-        if (captures[i].addr == pc && captures[i].count < capture_max) capture_state(i);
+        if (captures[i].addr == pc && captures[i].count < capture_max &&
+            captures[i].hits++ % capture_every == 0) capture_state(i);
 
     if (!divert_to_c) return;
     if (find_routine(pc)) {
@@ -433,6 +434,7 @@ bool oracle_add_capture(uint32_t addr, const char *name)
     captures[ncaptures].addr = addr & 0xFFFFFF;
     snprintf(captures[ncaptures].name, sizeof captures[ncaptures].name, "%s", name);
     captures[ncaptures].count = 0;
+    captures[ncaptures].hits = 0;
     ncaptures++;
     return true;
 }
@@ -441,6 +443,11 @@ void oracle_set_capture(const char *dir, unsigned max_per_addr)
 {
     snprintf(capture_dir, sizeof capture_dir, "%s", dir);
     capture_max = max_per_addr;
+}
+
+void oracle_set_capture_every(unsigned every)
+{
+    capture_every = every ? every : 1;
 }
 
 unsigned oracle_captured(void) { return captured_total; }

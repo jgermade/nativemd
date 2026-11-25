@@ -19,6 +19,7 @@
  *   --capture ADDR         save a state each time PC reaches ADDR (repeatable)
  *   --capture-dir DIR      where captured states go (default .)
  *   --capture-max N        per address (default 16)
+ *   --capture-every K      keep only every K-th hit of each address (default 1)
  *   --irq                  routine mode: ADDR ends in RTE (interrupt handler)
  *   --max-cycles N         routine mode limit (default 10000000)
  */
@@ -87,7 +88,7 @@ int main(int argc, char **argv)
     const char *captures[16];
     int ncaptures = 0;
     const char *capture_dir = ".";
-    unsigned capture_max = 16;
+    unsigned capture_max = 16, capture_every = 1;
     uint64_t frames = 0, max_cycles = 10000000;
     bool irq = false;
     const char *syms[4];
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
         else if (OPT("--capture"))     { if (ncaptures < 16) captures[ncaptures++] = v; }
         else if (OPT("--capture-dir")) capture_dir = v;
         else if (OPT("--capture-max")) capture_max = (unsigned)strtoul(v, NULL, 10);
+        else if (OPT("--capture-every")) capture_every = (unsigned)strtoul(v, NULL, 10);
         else if (OPT("--max-cycles"))  max_cycles = strtoull(v, NULL, 10);
         else if (strcmp(a, "--irq") == 0) irq = true;
         else if (a[0] != '-' && !rom_path) rom_path = a;
@@ -153,6 +155,7 @@ int main(int argc, char **argv)
     oracle_set_pad_script((const uint16_t (*)[2])pads, pad_frames);
     if (cov_path) oracle_enable_coverage();
     oracle_set_capture(capture_dir, capture_max);
+    oracle_set_capture_every(capture_every);
     for (int i = 0; i < ncaptures; i++)
         if (!oracle_add_capture(need_addr(captures[i]), captures[i])) { fprintf(stderr, "too many captures\n"); return 2; }
 
