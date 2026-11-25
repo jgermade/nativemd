@@ -34,7 +34,10 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if      (!strcmp(a, "--frames") && v)     { frames = strtoull(v, NULL, 10); i++; }
         else if (!strcmp(a, "--idle") && v)       { idle = v; i++; }
-        else if (!strcmp(a, "--sym") && v)        { if (nsyms < 4) syms[nsyms++] = v; i++; }
+        else if (!strcmp(a, "--sym") && v)        {
+            if (nsyms == 4) { fprintf(stderr, "more than 4 --sym\n"); return 2; }
+            syms[nsyms++] = v; i++;
+        }
         else if (!strcmp(a, "--input") && v)      { input = v; i++; }
         else if (!strcmp(a, "--trace") && v)      { trace_path = v; i++; }
         else if (!strcmp(a, "--state-out") && v)  { state_out = v; i++; }

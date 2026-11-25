@@ -75,7 +75,7 @@ static uint64_t hybrid_max_cycles = 50000000;
 static uint8_t *coverage;
 static size_t   coverage_words;
 
-#define MAX_CAPTURES 16
+#define MAX_CAPTURES 64
 static struct { uint32_t addr; char name[64]; unsigned count; uint64_t hits; } captures[MAX_CAPTURES];
 static size_t   ncaptures;
 static char     capture_dir[512] = ".";
