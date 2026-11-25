@@ -233,7 +233,10 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
 {
     suite s = { .game = game };
     const char *rom_path = NULL, *call = NULL;
-    const char *states[4096];
+    /* every non-option argument is a state: at most argc of them (the command line is the
+     * only limit; the OS refuses a too long one loudly) */
+    const char **states = malloc((size_t)argc * sizeof *states);
+    if (!states) { fprintf(stderr, "out of memory\n"); return 2; }
     int nstates = 0;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -259,8 +262,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
         else if (!strcmp(a, "-v"))                s.verbose = true;
         else if (a[0] == '-')                     { fprintf(stderr, "unknown option %s (see harness/suite.h)\n", a); return 2; }
         else if (!rom_path)                       rom_path = a;
-        else if (nstates < 4096)                  states[nstates++] = a;
-        else { fprintf(stderr, "more than 4096 states: split the suite\n"); return 2; }
+        else                                      states[nstates++] = a;
     }
     if (!rom_path || !call || !nstates) {
         fprintf(stderr, "usage: %s ROM --call ADDR [--irq] [--sym FILE] [--regs LIST] "
@@ -286,6 +288,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
     if (!s.rom_oracle || !s.rom_c) { fprintf(stderr, "out of memory\n"); return 2; }
     int passed = 0;
     for (int i = 0; i < nstates; i++) passed += check_state(&s, states[i]);
+    free(states);
     if (s.coverage && !oracle_write_coverage(s.coverage)) perror(s.coverage);
     nmd_set_fatal_handler(NULL);
     nmd_shutdown();
