@@ -6,12 +6,14 @@
  * the C on the engine, then compares traces and final states.
  *
  * Usage: SUITE ROM --call ADDR|LABEL [--irq] [--sym FILE] [--regs LIST]
- *              [--ignore-ram LO-HI]... [--replay] [--keep DIR] [-v] STATE...
+ *              [--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [-v] STATE...
  *
  *   --irq         the routine is an interrupt handler (ends in RTE)
  *   --regs        output registers to compare, e.g. d0,a1,ccr
  *   --ignore-ram  RAM ranges not compared (the stack range is always skipped)
  *   --replay      feed the oracle's device reads to the C (side-effect replay)
+ *   --hybrid      routines the C calls that have no C yet run as original code
+ *                 (the routine under test is still C)
  *   --keep DIR    write expected/actual traces of failing states there
  *
  * Exit status: 0 if every state passes, 1 otherwise, 2 on usage errors.

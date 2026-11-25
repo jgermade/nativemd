@@ -43,7 +43,7 @@ typedef struct suite {
     const uint8_t  *rom;
     size_t          rom_size;
     uint32_t        addr;
-    bool            irq, replay, verbose;
+    bool            irq, replay, verbose, hybrid;
     const char     *keep;
     const char     *syms[4];
     int             nsyms;
@@ -91,6 +91,11 @@ static bool run_candidate(const suite *s, const char *state, const run *expected
     if (!nmd_init(&cfg, s->game, s->rom, s->rom_size)) return false;
     nmd_set_fatal_handler(on_fatal);
     nmd_set_missing_routine_handler(NULL);
+    if (s->hybrid) {
+        /* Routines the one under test calls but that have no C yet run as original code. */
+        oracle_setup();
+        oracle_install_hybrid(10000000);
+    }
     if (!nmd_state_load(state)) { printf("  cannot load state\n"); return false; }
     if (s->replay) {
         FILE *rec = fmemopen(expected->trace, expected->trace_len ? expected->trace_len : 1, "r");
@@ -174,6 +179,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
         else if (!strcmp(a, "--keep") && v)       { s.keep = v; i++; }
         else if (!strcmp(a, "--irq"))             s.irq = true;
         else if (!strcmp(a, "--replay"))          s.replay = true;
+        else if (!strcmp(a, "--hybrid"))          s.hybrid = true;
         else if (!strcmp(a, "-v"))                s.verbose = true;
         else if (a[0] == '-')                     { fprintf(stderr, "unknown option %s (see harness/suite.h)\n", a); return 2; }
         else if (!rom_path)                       rom_path = a;
@@ -181,7 +187,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
     }
     if (!rom_path || !call || !nstates) {
         fprintf(stderr, "usage: %s ROM --call ADDR [--irq] [--sym FILE] [--regs LIST] "
-                        "[--ignore-ram LO-HI]... [--replay] [--keep DIR] STATE...\n", argv[0]);
+                        "[--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] STATE...\n", argv[0]);
         return 2;
     }
     uint8_t *rom = read_file(rom_path, &s.rom_size);
