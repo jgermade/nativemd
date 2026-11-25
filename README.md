@@ -7,10 +7,13 @@ interrupts, sound, controllers, saves and frame pacing.
 
 Fidelity: **behaviour-exact, not cycle-exact.** See [docs/contract.md](docs/contract.md).
 
-Status: early draft (contract 0.1). Headless core, an oracle (Musashi running the original
-68000 code on the same hardware model) and a `hello` program whose C produces exactly the
-same bus trace as its 68000 code. Rendering, the Z80 scheduler and sound are not
-implemented yet.
+Status: early draft (contract 0.1). Headless core and a verification harness: an oracle
+(Musashi running the original 68000 code on the same hardware model), per-routine suites,
+hybrid execution (original code and C mixed in one run) and state fuzzing. A `hello`
+program's C matches its 68000 code access for access, and a first real client (a Sonic 1
+decompilation, kept in a separate repository) has its first routines in C, verified the
+same way. Rendering, the Z80 scheduler and sound are not implemented yet. Current plan:
+[ROADMAP/2026-11-25](ROADMAP/2026-11-25/overview.md).
 
 ## Build
 
