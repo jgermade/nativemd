@@ -147,6 +147,26 @@ Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exac
 `MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
 references (hardware, FX68K).
 
+## Reference emulators
+
+The oracle and the C share nativemd's hardware model, so a mistake in that model would pass
+every suite. The contract's hardware facts are therefore checked separately, with small test
+ROMs (the `test-roms` repository) run on nativemd and on reference emulators:
+
+- `tools/refemu/fetch_cores.sh` fetches Genesis Plus GX and BlastEm (libretro cores, at
+  pinned commits) into `work/refemu` and builds them with `refemu`, a minimal libretro
+  runner (ours): it runs a ROM for N frames with no input and dumps the 68000 RAM. No
+  emulator code is part of nativemd.
+- `tools/refemu/run.sh TEST_ROMS_DIR` builds the test ROMs, runs each on `nmd-oracle` and
+  on both cores, and compares the result blocks (`tools/refemu/results.py`): every check
+  must give the contract's expected value on every machine.
+- A test ROM writes its checks (observed and expected words) at $FF0000 and turns the
+  background green when they all match the contract, red otherwise, so the same ROM can be
+  run on a MiSTer or a console. Emulators are a second reference, not ground truth:
+  hardware runs settle what the emulators disagree on.
+- Each test includes a control where it matters (the opposite order of a `MOVE.L`, a byte
+  that must differ), so a test that cannot tell the cases apart fails instead of passing.
+
 ## Tools
 
 | Tool | Purpose |

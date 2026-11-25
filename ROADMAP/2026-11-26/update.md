@@ -16,8 +16,11 @@ Supersedes `ROADMAP/2026-11-25/update.md`. History: `RECORD/2026-11-25.rom-write
 
 1. **Suite size**: the client has suites near the 4096-state limit of `nmd_suite_main`;
    raise it (allocated list) keeping a loud failure for a real limit.
-2. **Hardware facts**: test ROMs for MiSTer / console, first of all the ROM write without a
-   mapper (contract section 3, *to verify*).
+2. **Hardware facts**: test ROMs (`test-roms` repository) checked against reference
+   emulators (Genesis Plus GX, BlastEm) that nativemd runs itself (`tools/refemu`); the four
+   facts of contract section 3 agree on all machines. Next: VDP and timing facts as the
+   renderer needs them; MiSTer / console runs of the same ROMs (green / red screen) for what
+   the emulators cannot settle.
 3. **VDP rendering** (milestone 4), **Z80 coroutine** (5), **sound** (6), as before.
 
 ```mermaid
@@ -28,7 +31,8 @@ gantt
     ROM writes: ignore, trace, report     :done, d1, 2026-11-26, 1d
     section Engine
     Suite size limit                       :e0, 2026-11-27, 1d
-    Hardware test ROMs (+ MiSTer runs)     :e1, after e0, 10d
+    Reference emulators, first test ROMs   :done, d2, 2026-11-26, 1d
+    More test ROMs (+ MiSTer runs)         :e1, after e0, 10d
     VDP line renderer + frame dumps        :e2, after e0, 21d
     Z80 coroutine                          :e3, after e2, 10d
     PSG + YM2612                           :e4, after e3, 30d
