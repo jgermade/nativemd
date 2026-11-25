@@ -14,7 +14,8 @@
  *   --input FILE           pad script: one line per frame, "P1 [P2]" in hex
  *   --sym FILE             symbols "ADDRESS NAME" (names usable below)
  *   --idle START[:END]     idle loop (END defaults to the next symbol)
- *   --stack LO-HI          stack range whose accesses are not traced
+ *   --stack LO-HI          fixed stack range whose accesses are not traced (default:
+ *                          between the current A7 and the initial SSP)
  *   --coverage FILE        executed instruction addresses
  *   --capture ADDR         save a state each time PC reaches ADDR (repeatable)
  *   --capture-dir DIR      where captured states go (default .)

@@ -150,7 +150,7 @@ if(NMD_BUILD_TESTS)
     add_test(NAME hello_oracle_trace
         COMMAND nmd-tracediff ${OUT}/oracle.trace ${OUT}/hello.trace)
     add_test(NAME hello_oracle_state
-        COMMAND nmd-statediff --ignore-ram FFFA00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hello.nmds)
+        COMMAND nmd-statediff --ignore-ram FFFD00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hello.nmds)
     set_tests_properties(hello_oracle_trace hello_oracle_state PROPERTIES DEPENDS "hello;hello_oracle")
 
     add_executable(hello_suite tests/hello/hello_suite.c tests/hello/hello_game.c)
@@ -218,7 +218,7 @@ if(NMD_BUILD_TESTS)
         add_test(NAME hello_hybrid_${MODE}_trace
             COMMAND nmd-tracediff ${OUT}/oracle.trace ${OUT}/hybrid_${MODE}.trace)
         add_test(NAME hello_hybrid_${MODE}_state
-            COMMAND nmd-statediff --ignore-ram FFFA00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hybrid_${MODE}.nmds)
+            COMMAND nmd-statediff --ignore-ram FFFD00-FFFDFF ${OUT}/oracle.nmds ${OUT}/hybrid_${MODE}.nmds)
         set_tests_properties(hello_hybrid_${MODE}_trace hello_hybrid_${MODE}_state
             PROPERTIES DEPENDS "hello_hybrid_${MODE};hello_oracle")
     endforeach()

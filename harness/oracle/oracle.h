@@ -16,8 +16,15 @@
  * initial SSP, no idle loop). */
 void oracle_setup(void);
 
-/* Trace filters. */
+/*
+ * Trace filters. Stack accesses are not traced: by default those between the current A7
+ * and the initial SSP (the stack in use at that moment); oracle_set_stack() replaces that
+ * with a fixed inclusive range. oracle_min_sp() is the lowest A7 seen since setup or
+ * oracle_reset_min_sp(): RAM from there to the SSP may differ from the C's by design.
+ */
 void oracle_set_stack(uint32_t lo, uint32_t hi);        /* inclusive */
+uint32_t oracle_min_sp(void);
+void oracle_reset_min_sp(void);
 void oracle_set_idle(uint32_t lo, uint32_t hi);         /* [lo, hi)  */
 
 /* Symbols ("ADDRESS NAME" lines). resolve() accepts a name or a hex address;

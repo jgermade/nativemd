@@ -26,7 +26,18 @@ void m68k_set_rte_instr_callback(void (*callback)(void));
 
 /* ---- filters and trace ---------------------------------------------------- */
 
+/*
+ * Stack filter. Default: an access is a stack access when it falls between the current
+ * A7 and the initial SSP (the stack in use right now), allowing for Musashi's order of
+ * operations: pops raise A7 before reading (up to 4 bytes below A7), and MOVEM to -(A7)
+ * writes below A7 before lowering it (the range is computed from its register mask). oracle_set_stack() replaces that
+ * with a fixed range. min_sp records the lowest A7 seen, for comparisons of RAM.
+ */
+static uint32_t stack_top;            /* initial SSP (exclusive upper bound) */
+static bool     stack_fixed;
 static uint32_t stack_lo, stack_hi;
+static uint32_t min_sp;
+static uint32_t movem_lo;             /* MOVEM <regs>,-(A7): it writes below A7 before updating A7 */
 static uint32_t idle_lo, idle_hi;
 static bool     have_idle;
 static bool     idle_have_last;
@@ -89,7 +100,15 @@ static void emit(bool write, unsigned bits, uint32_t addr, uint32_t value)
 {
     if (!nmd_trace_enabled() || in_exception || muted) return;
     addr &= 0xFFFFFF;
-    if (addr >= stack_lo && addr <= stack_hi) return;
+    if (stack_fixed) {
+        if (addr >= stack_lo && addr <= stack_hi) return;
+    } else {
+        uint32_t sp = m68k_get_reg(NULL, M68K_REG_A7) & 0xFFFFFF;
+        if (sp < min_sp) min_sp = sp;
+        /* Pops (RTS, RTE, (A7)+ moves) raise A7 before reading: up to 4 bytes below it. */
+        if (addr + 4 >= sp && addr < stack_top) return;
+        if (movem_lo && addr >= movem_lo && addr < sp) return;
+    }
     if (!write && in_idle_loop()) {
         if (idle_have_last && idle_last.bits == bits && idle_last.addr == addr && idle_last.value == value)
             return;
@@ -301,9 +320,23 @@ static void on_instr(unsigned int pc)
         return;
     }
     if (pc == TRAMPOLINE) return;
+    {
+        uint32_t sp = m68k_get_reg(NULL, M68K_REG_A7) & 0xFFFFFF;
+        if (sp < min_sp) min_sp = sp;
+    }
 
     /* CLR.b/w/l <ea> with a memory operand: 0100 0010 ss mmm rrr, ss != 11, mmm != 000 */
     uint16_t op = nmd_bus_rd16_raw(pc & ~1u);
+    /* MOVEM.w/.l <list>,-(A7): 0100 1000 1s 100 111 */
+    movem_lo = 0;
+    if ((op & 0xFFBF) == 0x48A7) {
+        uint16_t mask = nmd_bus_rd16_raw((pc + 2) & ~1u);
+        unsigned n = 0;
+        for (unsigned b = 0; b < 16; b++) n += (mask >> b) & 1;
+        uint32_t sp = m68k_get_reg(NULL, M68K_REG_A7) & 0xFFFFFF;
+        movem_lo = (sp - n * ((op & 0x40) ? 4u : 2u)) & 0xFFFFFF;
+        if (movem_lo < min_sp) min_sp = movem_lo;
+    }
     clr_read_pending = (op & 0xFF00) == 0x4200 && (op & 0x00C0) != 0x00C0 && (op & 0x0038) != 0;
 
     bool in_idle = have_idle && pc >= idle_lo && pc < idle_hi;
@@ -336,8 +369,9 @@ void oracle_setup(void)
 {
     const uint8_t *rom = nmd_rom(NULL);
     uint32_t ssp = be32(rom);
-    stack_lo = (ssp - 0x400) & 0xFFFFFF;
-    stack_hi = (ssp - 1) & 0xFFFFFF;
+    stack_top = ssp & 0xFFFFFF;
+    stack_fixed = false;
+    min_sp = stack_top;
     have_idle = idle_have_last = in_exception = clr_read_pending = false;
     irq_depth = 0;
     frames_mode = hint_pending = vint_pending = false;
@@ -356,7 +390,15 @@ void oracle_setup(void)
     muted = false;
 }
 
-void oracle_set_stack(uint32_t lo, uint32_t hi) { stack_lo = lo & 0xFFFFFF; stack_hi = hi & 0xFFFFFF; }
+void oracle_set_stack(uint32_t lo, uint32_t hi)
+{
+    stack_lo = lo & 0xFFFFFF;
+    stack_hi = hi & 0xFFFFFF;
+    stack_fixed = true;
+}
+
+uint32_t oracle_min_sp(void) { return min_sp; }
+void oracle_reset_min_sp(void) { min_sp = stack_top; }
 
 void oracle_set_idle(uint32_t lo, uint32_t hi)
 {

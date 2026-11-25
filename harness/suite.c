@@ -35,6 +35,7 @@ static uint8_t *read_file(const char *path, size_t *size)
 typedef struct run {
     char           *trace;
     size_t          trace_len;
+    uint32_t        min_sp;     /* oracle run: lowest A7 (its stack differs from the C's) */
     nmd_state_image state;
 } run;
 
@@ -69,7 +70,9 @@ static bool run_oracle(const suite *s, const char *state, run *out)
     if (!nmd_state_load(state)) { printf("  cannot load state\n"); return false; }
     mem = open_memstream(&out->trace, &out->trace_len);
     nmd_trace_open(mem);
+    oracle_reset_min_sp();
     bool ok = oracle_call(s->addr, s->irq, 10000000);
+    out->min_sp = oracle_min_sp();
     nmd_trace_open(NULL);
     fclose(mem);
     mem = NULL;
@@ -149,7 +152,14 @@ static bool check_state(const suite *s, const char *state)
     int t = nmd_trace_compare(fe, "oracle", fa, "C", 5, stdout);
     fclose(fe);
     fclose(fa);
-    int d = nmd_state_compare(&e->state, &a->state, &s->cmp, stdout);
+    /* The oracle's return frame and pushes live below the state's A7: not compared. */
+    nmd_cmp_opts cmp = s->cmp;
+    uint32_t a7 = e->state.regs.a[7] & 0xFFFFFF;
+    uint32_t lo = e->min_sp < a7 ? e->min_sp : a7;
+    char range[32];
+    snprintf(range, sizeof range, "%X-%X", lo, (a7 - 1) & 0xFFFFFF);
+    if (lo < a7) nmd_cmp_ignore_ram(&cmp, range);
+    int d = nmd_state_compare(&e->state, &a->state, &cmp, stdout);
     pass = t == 0 && d == 0;
     if (!pass) keep_traces(s, state, e, a);
 done:
@@ -201,10 +211,6 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
         if (!oracle_load_syms(s.syms[i])) { perror(s.syms[i]); return 2; }
     if (!oracle_resolve(call, &s.addr, NULL, NULL)) { fprintf(stderr, "unknown routine %s\n", call); return 2; }
     if (!find_routine(s.addr)) { fprintf(stderr, "no C for routine %06X in %s\n", s.addr, game->name); return 2; }
-    uint32_t ssp = (uint32_t)rom[0] << 24 | (uint32_t)rom[1] << 16 | (uint32_t)rom[2] << 8 | rom[3];
-    char stack[32];
-    snprintf(stack, sizeof stack, "%X-%X", (ssp - 0x400) & 0xFFFFFF, (ssp - 1) & 0xFFFFFF);
-    nmd_cmp_ignore_ram(&s.cmp, stack);
 
     int passed = 0;
     for (int i = 0; i < nstates; i++) passed += check_state(&s, states[i]);
