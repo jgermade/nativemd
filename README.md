@@ -9,11 +9,15 @@ Fidelity: **behaviour-exact, not cycle-exact.** See [docs/contract.md](docs/cont
 
 Status: early draft (contract 0.1). Headless core and a verification harness: an oracle
 (Musashi running the original 68000 code on the same hardware model), per-routine suites,
-hybrid execution (original code and C mixed in one run) and state fuzzing. A `hello`
-program's C matches its 68000 code access for access, and a first real client (a Sonic 1
-decompilation, kept in a separate repository) has its first routines in C, verified the
-same way. Rendering, the Z80 scheduler and sound are not implemented yet. Current plan:
-[ROADMAP/2026-11-25](ROADMAP/2026-11-25/overview.md).
+hybrid execution (original code and C mixed in one run), state fuzzing and per-suite
+coverage of the original code. A `hello` program's C matches its 68000 code access for
+access. The first real client, a Sonic 1 decompilation kept in a separate repository, has
+84 routines in C (about 13.5 % of the game's 68000 instructions are reachable from them),
+including the per-frame object loop, level collision, Sonic's collision with objects and
+his ground movement. Each one is verified the same way: suites on real, fuzzed and edge
+states, a coverage report, and hybrid runs that match runs without the C access for access.
+Rendering, the Z80 scheduler and sound are not implemented yet. Current plan:
+[ROADMAP/2026-11-25](ROADMAP/2026-11-25/update.md).
 
 ## Build
 
