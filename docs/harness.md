@@ -96,7 +96,10 @@ Captured states show what a routine really receives while playing, but often onl
 distinct inputs (Sonic 1's `CalcSine` saw 2 angles of 256 in 1500 frames). `nmd-statefuzz`
 derives states from a captured one: `--sweep FIELD=LO-HI` (exhaustive), `--rand FIELD=LO-HI`
 (uniform, reproducible with `--seed`), `--value FIELD=V`. FIELD is a register part
-(`d0.b`, `d1.w`, `a0.l`) or a RAM location (`FFF636.l`); only that part changes.
+(`d0.b`, `d1.w`, `a0.l`), a RAM location (`FFF636.l`) or RAM relative to an address register
+(`(a0+12).w`: a field of the object `a0` points to, after `a0` itself is generated); only
+that part changes. Ranges take a step (`0-7E:2` for even values, `D800-EFC0:40` for object
+slots).
 
 Random states are not enough on their own: on Sonic 1's `CalcAngle` a deliberate bug at
 the `-$8000` edge passed 2000 random states and failed hand-picked edge cases (zeros, equal
