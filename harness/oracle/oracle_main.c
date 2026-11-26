@@ -141,7 +141,7 @@ int main(int argc, char **argv)
     size_t rom_size;
     uint8_t *rom = read_file(rom_path, &rom_size);
     static const nmd_game no_game = { .name = "oracle" };
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = rom_writes };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = rom_writes, .no_render = true };
     if (!nmd_init(&cfg, &no_game, rom, rom_size)) return 2;
     nmd_set_fatal_handler(fatal_handler);
     oracle_setup();

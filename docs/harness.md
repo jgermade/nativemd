@@ -148,6 +148,14 @@ So a game can start with no C at all and gain C one routine at a time; the hello
 with only `HInt` in C, and with `HInt` + `ReadPad` (called by `BSR` from ASM `VInt`), and
 must match the full-oracle trace and state.
 
+Screenshots: `--screenshot N:FILE.png` (repeatable) on `nmd-hybrid` and every game runner
+built on `nmd_hybrid_main` writes the picture at the end of frame N (1-based, as `--frames`
+counts) as a PNG (`harness/png.c`: no dependencies, uncompressed). The picture comes from
+the engine's renderer (`src/render.c`, milestone 4), drawn line by line before each line's
+HINT. Without `--screenshot` the tools run with `no_render` (headless, as fast as before);
+the suites and `nmd-oracle` always do. A run with C and the same run without C give
+identical pictures when their traces match.
+
 Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exact
 `MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
 references (hardware, FX68K).

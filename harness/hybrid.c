@@ -11,6 +11,7 @@
  *   --input       pad script, one line per frame: "P1 [P2]" in hex (NMD_PAD_*)
  *   --max-cycles  limit between two waits before giving up (default 50000000)
  *   --rom-writes  ignore (default; traced and reported at the end) or fatal
+ *   --screenshot  N:FILE.png: the picture after N frames (repeatable)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,21 @@
 
 #include "hybrid.h"
 #include "oracle/oracle.h"
+#include "png.h"
+
+/* --screenshot N:FILE: the picture presented at the end of frame N (1-based). */
+#define MAX_SHOTS 64
+static struct { uint64_t frame; const char *path; } shots[MAX_SHOTS];
+static int nshots;
+static void (*null_present)(void *, uint64_t, const uint32_t *, int, int);
+
+static void present(void *user, uint64_t frame, const uint32_t *argb, int width, int height)
+{
+    if (null_present) null_present(user, frame, argb, width, height);
+    for (int i = 0; i < nshots; i++)
+        if (shots[i].frame == frame + 1 && !nmd_png_write(shots[i].path, argb, width, height, 320))
+            fprintf(stderr, "nmd-hybrid: cannot write %s\n", shots[i].path);
+}
 
 static void fatal_handler(const char *msg)
 {
@@ -45,6 +61,14 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         else if (!strcmp(a, "--trace") && v)      { trace_path = v; i++; }
         else if (!strcmp(a, "--state-out") && v)  { state_out = v; i++; }
         else if (!strcmp(a, "--max-cycles") && v) { max_cycles = strtoull(v, NULL, 10); i++; }
+        else if (!strcmp(a, "--screenshot") && v) {
+            char *colon = strchr(v, ':');
+            if (!colon || nshots == MAX_SHOTS) { fprintf(stderr, "nmd-hybrid: bad --screenshot '%s' (N:FILE)\n", v); return 2; }
+            shots[nshots].frame = strtoull(v, NULL, 10);
+            shots[nshots].path = colon + 1;
+            nshots++;
+            i++;
+        }
         else if (!strcmp(a, "--rom-writes") && v) {
             if (!oracle_parse_rom_writes(v, &rom_writes)) { fprintf(stderr, "nmd-hybrid: bad --rom-writes '%s' (ignore|fatal)\n", v); return 2; }
             i++;
@@ -54,7 +78,8 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     }
     if (!rom_path || !frames || !idle) {
         fprintf(stderr, "usage: nmd-hybrid ROM --frames N --idle START:END [--sym FILE] [--input FILE] "
-                        "[--trace FILE] [--state-out FILE] [--max-cycles N] [--rom-writes ignore|fatal]\n");
+                        "[--trace FILE] [--state-out FILE] [--max-cycles N] [--rom-writes ignore|fatal] "
+                        "[--screenshot N:FILE.png]...\n");
         return 2;
     }
 
@@ -85,7 +110,10 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         fclose(in);
     }
     nmd_null_host host = { .script = { pads[0], pads[1] }, .script_len = { npads, npads } };
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .host = nmd_null_host_make(&host), .rom_writes = rom_writes };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .host = nmd_null_host_make(&host), .rom_writes = rom_writes,
+                       .no_render = nshots == 0 };      /* draw only for screenshots */
+    null_present = cfg.host.present_frame;
+    cfg.host.present_frame = present;
     if (!nmd_init(&cfg, game, rom, rom_size)) return 2;
     nmd_set_fatal_handler(fatal_handler);
 

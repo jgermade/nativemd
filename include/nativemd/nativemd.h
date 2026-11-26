@@ -44,6 +44,7 @@ typedef struct nmd_config {
     bool           overseas;   /* version register bit 7 */
     nmd_host       host;
     nmd_rom_writes rom_writes;
+    bool           no_render;  /* headless runs: skip drawing (the framebuffer is not updated) */
 } nmd_config;
 
 /*
@@ -84,6 +85,9 @@ uint16_t      *nmd_vsram(void);      /* 40 words */
 uint8_t       *nmd_vdp_regs(void);   /* 24 bytes */
 uint8_t       *nmd_z80_ram(void);    /* 8 KB   */
 const uint8_t *nmd_rom(size_t *size);
+/* The picture of the last frame (render.c): 0xFFRRGGBB pixels, rows of 320; width 320
+ * (H40) or 256 (H32), height 224 or 240 (the active lines). */
+const uint32_t *nmd_framebuffer(int *width, int *height);
 
 /*
  * Machine state snapshot (docs/harness.md, "State files"): CPU registers,

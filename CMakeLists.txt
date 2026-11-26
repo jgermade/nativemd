@@ -27,6 +27,7 @@ add_library(nativemd
     src/state.c
     src/trace.c
     src/vdp.c
+    src/render.c
     src/z80.c
 )
 target_include_directories(nativemd PUBLIC include)
@@ -70,7 +71,7 @@ target_link_libraries(nmd_compare PUBLIC nativemd)
 target_compile_options(nmd_compare PRIVATE ${NMD_WARNINGS})
 
 # Oracle (Musashi + the engine's hardware), suites and hybrid execution.
-add_library(nmd_harness STATIC harness/oracle/oracle.c harness/suite.c harness/hybrid.c)
+add_library(nmd_harness STATIC harness/oracle/oracle.c harness/suite.c harness/hybrid.c harness/png.c)
 target_include_directories(nmd_harness PUBLIC harness)
 target_link_libraries(nmd_harness PUBLIC nativemd nmd_compare musashi_cpu)
 target_compile_options(nmd_harness PRIVATE ${NMD_WARNINGS})
@@ -112,6 +113,10 @@ if(NMD_BUILD_TESTS)
     target_link_libraries(test_core PRIVATE nativemd)
     target_compile_definitions(test_core PRIVATE _POSIX_C_SOURCE=200809L)
     add_test(NAME core COMMAND test_core)
+    add_executable(test_render tests/test_render.c)
+    target_link_libraries(test_render PRIVATE nativemd)
+    target_compile_options(test_render PRIVATE ${NMD_WARNINGS})
+    add_test(NAME render COMMAND test_render)
 
     set(HELLO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/hello)
     set(OUT ${CMAKE_CURRENT_BINARY_DIR})

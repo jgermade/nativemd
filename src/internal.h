@@ -94,6 +94,12 @@ void     vdp_begin_frame(void);
 bool     vdp_line(unsigned line);       /* true when a HINT should be raised */
 void     vdp_end_active(void);          /* VBlank starts; VINT pending */
 void     vdp_vint_ack(void);
+/* render.c: the picture, one active line at a time (called by vdp_line). */
+#define NMD_FB_WIDTH  320
+#define NMD_FB_HEIGHT 240
+extern uint32_t nmd_fb[NMD_FB_WIDTH * NMD_FB_HEIGHT];
+void     vdp_render_line(unsigned line);
+unsigned vdp_width(void);
 bool     vdp_vint_enabled(void);
 
 /* io.c */
