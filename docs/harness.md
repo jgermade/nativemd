@@ -165,6 +165,10 @@ Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exac
 `MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
 references (hardware, FX68K).
 
+`--native` (nmd-hybrid, the game's hybrid and play tools): no oracle. The engine runs the
+game alone and an address without C is a fatal error, as in a finished port; a run that
+gets through shows that every routine it reached has C.
+
 ## Playing
 
 `nmd_play_main()` (`harness/play.c`) is the hybrid runner with the desktop host

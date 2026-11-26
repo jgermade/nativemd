@@ -21,6 +21,7 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
     nmd_video video = NMD_VIDEO_NTSC;
     const char *region = "us";
     uint64_t frames = 0, max_cycles = 0;
+    bool native = false;                                /* --native: no oracle, missing C is fatal */
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if      (!strcmp(a, "--idle") && v)       { idle = v; i++; }
@@ -35,6 +36,7 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
         else if (!strcmp(a, "--no-vsync"))        vsync = false;
         else if (!strcmp(a, "--frames") && v)     { frames = strtoull(v, NULL, 10); i++; }
         else if (!strcmp(a, "--max-cycles") && v) { max_cycles = strtoull(v, NULL, 10); i++; }
+        else if (!strcmp(a, "--native"))         native = true;
         else if (a[0] != '-' && !rom_path)        rom_path = a;
         else { rom_path = NULL; break; }
     }
@@ -44,7 +46,7 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
     else rom_path = NULL;
     if (!rom_path || !idle) {
         fprintf(stderr, "usage: %s ROM [--region jp|us|eu] [--pal] [--no-vsync] [--scale N] [--fullscreen] "
-                        "[--idle START:END] [--sym FILE] [--frames N] [--max-cycles N]\n"
+                        "[--idle START:END] [--sym FILE] [--frames N] [--max-cycles N] [--native]\n"
                         "  --region  jp (60 Hz, Japan), us (60 Hz, default), eu (50 Hz; --pal)\n"
                         "keys: arrows, A/S/D = A/B/C, Z/X/C = X/Y/Z, Enter = Start, P = pause, "
                         "Tab = fast forward, Caps Lock = HUD (FPS, vsync, rate), V = vsync, Alt+Enter (Cmd+Enter) = fullscreen, "
@@ -79,9 +81,9 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
         return 2;
     }
     oracle_set_idle(start, end);
-    oracle_install_hybrid(max_cycles);
-    fprintf(stderr, "%s: %zu routine(s) in C, the rest as original code; region %s (%s, %s Hz)\n",
-            game->name, game->routine_count, region, overseas ? "overseas" : "domestic",
+    if (!native) oracle_install_hybrid(max_cycles);   /* --native: the engine alone */
+    fprintf(stderr, "%s: %zu routine(s) in C, %s; region %s (%s, %s Hz)\n",
+            game->name, game->routine_count, native ? "the engine alone" : "the rest as original code", region, overseas ? "overseas" : "domestic",
             video == NMD_VIDEO_PAL ? "50" : "60");
 
     while (!nmd_sdl_quit_requested(sdl) && !nmd_game_finished() && (!frames || nmd_frame_count() < frames))

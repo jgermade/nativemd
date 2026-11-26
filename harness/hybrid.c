@@ -4,12 +4,13 @@
  * scheduled by the engine's frame loop.
  *
  * Usage: PROGRAM ROM --frames N --idle START:END [--sym FILE] [--input FILE]
- *                   [--trace FILE] [--state-out FILE] [--max-cycles N]
+ *                   [--trace FILE] [--state-out FILE] [--max-cycles N] [--native]
  *
  *   --idle        the game's VBlank wait loop (required: it is where the
  *                 engine runs the rest of the frame)
  *   --input       pad script, one line per frame: "P1 [P2]" in hex (NMD_PAD_*)
  *   --max-cycles  limit between two waits before giving up (default 50000000)
+ *   --native      no oracle: the engine alone, an address without C is fatal
  *   --rom-writes  ignore (default; traced and reported at the end) or fatal
  *   --screenshot  N:FILE.png: the picture after N frames (repeatable)
  *   --region      jp (default; Japan, NTSC), us (overseas, NTSC), eu (overseas, PAL 50 Hz)
@@ -49,6 +50,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     const char *syms[4];
     int nsyms = 0;
     uint64_t frames = 0, max_cycles = 0;
+    bool native = false;                                /* --native: no oracle, missing C is fatal */
     nmd_rom_writes rom_writes = NMD_ROM_WRITES_IGNORE;
     nmd_video video = NMD_VIDEO_NTSC;
     bool overseas = false;
@@ -64,6 +66,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         else if (!strcmp(a, "--trace") && v)      { trace_path = v; i++; }
         else if (!strcmp(a, "--state-out") && v)  { state_out = v; i++; }
         else if (!strcmp(a, "--max-cycles") && v) { max_cycles = strtoull(v, NULL, 10); i++; }
+        else if (!strcmp(a, "--native"))         native = true;
         else if (!strcmp(a, "--screenshot") && v) {
             char *colon = strchr(v, ':');
             if (!colon || nshots == MAX_SHOTS) { fprintf(stderr, "nmd-hybrid: bad --screenshot '%s' (N:FILE)\n", v); return 2; }
@@ -86,7 +89,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     if (!rom_path || !frames || !idle) {
         fprintf(stderr, "usage: nmd-hybrid ROM --frames N --idle START:END [--sym FILE] [--input FILE] "
                         "[--trace FILE] [--state-out FILE] [--max-cycles N] [--rom-writes ignore|fatal] "
-                        "[--screenshot N:FILE.png]... [--region jp|us|eu]\n");
+                        "[--screenshot N:FILE.png]... [--region jp|us|eu] [--native]\n");
         return 2;
     }
 
@@ -135,7 +138,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         return 2;
     }
     oracle_set_idle(start, end);
-    oracle_install_hybrid(max_cycles);
+    if (!native) oracle_install_hybrid(max_cycles);   /* --native: the engine alone */
 
     FILE *trace = NULL;
     if (trace_path && !(trace = fopen(trace_path, "w"))) { perror(trace_path); return 2; }
