@@ -57,9 +57,13 @@ static void draw_hud(nmd_sdl *s)
     ROW("Region", "%s, %s Hz", s->region, rate < 55 ? "50" : "60");
     ROW("VSync", "%s", !s->vsync ? "off" : s->vsync_paces ? "on" : "on (clock paces)");
     ROW("Display", "%d Hz", s->display_hz);
-    if (s->paused) ROW("", "Paused");
-    else if (s->fast_forward) ROW("", "Fast forward");
+    ROW("", "%s", s->paused ? "Paused" : s->fast_forward ? "Fast forward" : "");   /* always a row */
 #undef ROW
+    /* A fixed size: the widest text each column can show (so the panel does not change
+     * size with its content). */
+    static const char *const label_widest[] = { "Display", "Region", "VSync" };
+    static const char *const value_widest[] = { "000.0 / 00.00", "0000 fps (00.0x)", "Europe, 00 Hz",
+                                                "on (clock paces)", "000 Hz", "Fast forward" };
 
     SDL_Renderer *r = s->renderer;
     SDL_RenderSetLogicalSize(r, 0, 0);                  /* window pixels from here */
@@ -69,9 +73,16 @@ static void draw_hud(nmd_sdl *s)
     s->font = hud_font_get(r, s->font, px);
     if (s->font) {
         float lw = 0, vw = 0, gap = (float)px * 0.8f, pad = (float)px * 0.7f, lh = hud_line_height(s->font);
-        for (int i = 0; i < n; i++) {
-            float a = hud_text_width(s->font, rows[i][0]), b = hud_text_width(s->font, rows[i][1]);
+        for (size_t i = 0; i < sizeof label_widest / sizeof *label_widest; i++) {
+            float a = hud_text_width(s->font, label_widest[i]);
             if (a > lw) lw = a;
+        }
+        for (size_t i = 0; i < sizeof value_widest / sizeof *value_widest; i++) {
+            float b = hud_text_width(s->font, value_widest[i]);
+            if (b > vw) vw = b;
+        }
+        for (int i = 0; i < n; i++) {                   /* (a value wider than its template) */
+            float b = hud_text_width(s->font, rows[i][1]);
             if (b > vw) vw = b;
         }
         float w = lw + gap + vw + 2 * pad, h = (float)n * lh + 2 * pad - lh * 0.15f;
