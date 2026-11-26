@@ -91,6 +91,7 @@ typedef struct suite {
     size_t          rom_size;
     uint32_t        addr;
     bool            irq, replay, verbose, hybrid;
+    uint64_t        max_cycles; /* --max-cycles N: per oracle run (and hybrid slice); default 10M */
     const char     *keep;
     const char     *coverage;   /* --coverage FILE: original code the oracle runs, all states */
     const char     *syms[4];
@@ -121,7 +122,7 @@ static bool run_oracle(const suite *s, const char *state, run *out)
     mem = open_memstream(&out->trace, &out->trace_len);
     nmd_trace_open(mem);
     oracle_reset_min_sp();
-    bool ok = oracle_call(s->addr, s->irq, 10000000);
+    bool ok = oracle_call(s->addr, s->irq, s->max_cycles);
     out->min_sp = oracle_min_sp();
     out->rom_writes = nmd_rom_write_total();
     tally_add(s->rom_oracle, state);
@@ -150,7 +151,7 @@ static bool run_candidate(const suite *s, const char *state, const run *expected
     if (s->hybrid) {
         /* Routines the one under test calls but that have no C yet run as original code. */
         oracle_setup();
-        oracle_install_hybrid(10000000);
+        oracle_install_hybrid(s->max_cycles);
     }
     if (!nmd_state_load(state)) { printf("  cannot load state\n"); return false; }
     if (s->replay) {
@@ -161,7 +162,17 @@ static bool run_candidate(const suite *s, const char *state, const run *expected
     }
     mem = open_memstream(&out->trace, &out->trace_len);
     nmd_trace_open(mem);
-    call_routine(s->addr);
+    if (s->irq) {
+        /* As the engine takes an interrupt (machine.c take_interrupt): M68K is saved
+         * around the handler and restored after it, like the 68000's exception frame and
+         * RTE (the oracle side returns through its RTE). The state was captured at the
+         * handler's entry, so SR already holds the handler's mask. */
+        m68k_regs saved = M68K;
+        call_routine(s->addr);
+        M68K = saved;
+    } else {
+        call_routine(s->addr);
+    }
     nmd_trace_open(NULL);
     fclose(mem);
     mem = NULL;
@@ -231,7 +242,7 @@ done:
 
 int nmd_suite_main(int argc, char **argv, const nmd_game *game)
 {
-    suite s = { .game = game };
+    suite s = { .game = game, .max_cycles = 10000000 };
     const char *rom_path = NULL, *call = NULL;
     /* every non-option argument is a state: at most argc of them (the command line is the
      * only limit; the OS refuses a too long one loudly) */
@@ -256,6 +267,12 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
             if (!oracle_parse_rom_writes(v, &s.rom_writes)) { fprintf(stderr, "bad --rom-writes %s (ignore|fatal)\n", v); return 2; }
             i++;
         }
+        else if (!strcmp(a, "--max-cycles") && v) {
+            char *end;
+            s.max_cycles = strtoull(v, &end, 0);
+            if (*end || !s.max_cycles) { fprintf(stderr, "bad --max-cycles %s\n", v); return 2; }
+            i++;
+        }
         else if (!strcmp(a, "--irq"))             s.irq = true;
         else if (!strcmp(a, "--replay"))          s.replay = true;
         else if (!strcmp(a, "--hybrid"))          s.hybrid = true;
@@ -267,7 +284,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
     if (!rom_path || !call || !nstates) {
         fprintf(stderr, "usage: %s ROM --call ADDR [--irq] [--sym FILE] [--regs LIST] "
                         "[--ignore-ram LO-HI]... [--replay] [--hybrid] [--keep DIR] [--coverage FILE] "
-                        "[--rom-writes ignore|fatal] STATE...\n", argv[0]);
+                        "[--rom-writes ignore|fatal] [--max-cycles N] STATE...\n", argv[0]);
         return 2;
     }
     uint8_t *rom = read_file(rom_path, &s.rom_size);

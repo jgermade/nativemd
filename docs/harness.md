@@ -60,7 +60,12 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
   the run stops right after the `RTE` of the N-th VINT handler, the point where the engine's
   `nmd_run_frames(N)` stops.
 - **Routine mode** (`--state S --call ADDR [--irq]`): load a state, push a sentinel return
-  address (or an exception frame for an interrupt handler) and run until it returns.
+  address (or an exception frame for an interrupt handler) and run until it returns. With
+  `--irq` the suite runs the C as the engine takes an interrupt: `M68K` is saved before the
+  handler and restored after it (the oracle side restores through its `RTE`), so a handler
+  is compared on what it leaves in memory and devices, not in registers. A run stops with
+  an error after `--max-cycles N` cycles (default 10 000 000), for routines that never
+  return; routines with long busy waits (Sonic 1's "SEGA" PCM in VBlank) need more.
 - **Trace filters**: instruction fetches (Musashi's immediate reads) are not traced;
   PC-relative reads are. The vector fetch of an interrupt and accesses to the stack range
   (default: the 1 KB below the initial SSP, `--stack`) are dropped, because the C does not
