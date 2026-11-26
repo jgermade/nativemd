@@ -47,7 +47,9 @@ static void handle_events(nmd_sdl *s)
         case SDL_KEYDOWN:
             if (e.key.repeat) break;
             if (e.key.keysym.sym == SDLK_ESCAPE) s->quit = true;
-            else if (e.key.keysym.sym == SDLK_F11) toggle_fullscreen(s);
+            else if ((e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) &&
+                     (e.key.keysym.mod & (KMOD_ALT | KMOD_GUI)))
+                toggle_fullscreen(s);                   /* Alt+Enter (Cmd+Enter on macOS) */
             else if (e.key.keysym.sym == SDLK_p) s->paused = !s->paused;
             break;
         case SDL_CONTROLLERDEVICEADDED: open_first_pad(s); break;
@@ -113,10 +115,14 @@ static uint16_t poll_pad(void *user, int port, uint64_t frame)
     if (k[SDL_SCANCODE_DOWN])  b |= NMD_PAD_DOWN;
     if (k[SDL_SCANCODE_LEFT])  b |= NMD_PAD_LEFT;
     if (k[SDL_SCANCODE_RIGHT]) b |= NMD_PAD_RIGHT;
-    if (k[SDL_SCANCODE_Z] || k[SDL_SCANCODE_A]) b |= NMD_PAD_A;
-    if (k[SDL_SCANCODE_X] || k[SDL_SCANCODE_S]) b |= NMD_PAD_B;
-    if (k[SDL_SCANCODE_C] || k[SDL_SCANCODE_D]) b |= NMD_PAD_C;
-    if (k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_KP_ENTER]) b |= NMD_PAD_START;
+    if (k[SDL_SCANCODE_A]) b |= NMD_PAD_A;
+    if (k[SDL_SCANCODE_S]) b |= NMD_PAD_B;
+    if (k[SDL_SCANCODE_D]) b |= NMD_PAD_C;
+    if (k[SDL_SCANCODE_Z]) b |= NMD_PAD_X;               /* 6-button pad (not yet seen by games: */
+    if (k[SDL_SCANCODE_X]) b |= NMD_PAD_Y;               /* io.c has no 6-button protocol yet) */
+    if (k[SDL_SCANCODE_C]) b |= NMD_PAD_Z;
+    bool fullscreen_combo = (SDL_GetModState() & (KMOD_ALT | KMOD_GUI)) != 0;
+    if ((k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_KP_ENTER]) && !fullscreen_combo) b |= NMD_PAD_START;
     if (s->pad) {
         SDL_GameController *c = s->pad;
         const int dead = 12000;
@@ -128,8 +134,11 @@ static uint16_t poll_pad(void *user, int port, uint64_t frame)
         if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) || ax > dead)  b |= NMD_PAD_RIGHT;
         if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_A)) b |= NMD_PAD_A;
         if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_B)) b |= NMD_PAD_B;
-        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_X) ||
-            SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_Y)) b |= NMD_PAD_C;
+        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_X)) b |= NMD_PAD_C;
+        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_Y)) b |= NMD_PAD_Y;
+        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) b |= NMD_PAD_X;
+        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) b |= NMD_PAD_Z;
+        if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_BACK)) b |= NMD_PAD_MODE;
         if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_START)) b |= NMD_PAD_START;
     }
     return b;

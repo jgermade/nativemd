@@ -166,8 +166,10 @@ references (hardware, FX68K).
 (`host/sdl`, SDL2): a window with the renderer's picture, keyboard and game controllers as
 pad 1, frames paced at 59.92 Hz (49.70 Hz with `--pal`). Built only when CMake finds SDL2.
 `nmd-play ROM --idle START:END` plays a ROM with no C at all; a game's own runner passes its
-routine table and idle loop (the Sonic 1 client's `s1-play`). Keys: arrows, Z / X / C,
-Enter, P (pause), Tab (fast forward), F11, Esc. No sound until the Z80 and sound chips
+routine table and idle loop (the Sonic 1 client's `s1-play`). Keys: arrows, A / S / D =
+A / B / C, Z / X / C = X / Y / Z (games see them once `io.c` has the 6-button protocol),
+Enter = Start, Alt+Enter (Cmd+Enter on macOS) = fullscreen, P = pause, Tab (held) = fast
+forward, Esc = quit. No sound until the Z80 and sound chips
 exist (milestones 5-6).
 
 ## Reference emulators

@@ -3,9 +3,11 @@
  * game controllers as pad 1, frame pacing at the video rate. Optional: built only when
  * SDL2 is found. Everything platform-specific stays here, outside the engine.
  *
- * Keys: arrows = D-pad, Z / X / C (or A / S / D) = A / B / C, Enter = Start,
- * F11 = fullscreen, P = pause, Tab (held) = fast forward, Esc = quit.
- * Controllers: D-pad or left stick, A / B / X(or Y) = A / B / C, Start.
+ * Keys: arrows = D-pad, A / S / D = A / B / C, Z / X / C = X / Y / Z, Enter = Start,
+ * Alt+Enter (Cmd+Enter on macOS) = fullscreen, P = pause, Tab (held) = fast forward,
+ * Esc = quit. X / Y / Z / Mode reach games once io.c has the 6-button protocol.
+ * Controllers: D-pad or left stick, A / B / X = A / B / C, LB / Y / RB = X / Y / Z,
+ * Back = Mode, Start.
  */
 #ifndef NMD_SDL_HOST_H
 #define NMD_SDL_HOST_H

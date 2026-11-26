@@ -38,8 +38,8 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
     if (!rom_path || !idle) {
         fprintf(stderr, "usage: %s ROM [--idle START:END] [--sym FILE] [--scale N] [--fullscreen] [--pal] "
                         "[--frames N] [--max-cycles N]\n"
-                        "keys: arrows, Z/X/C = A/B/C, Enter = Start, P = pause, Tab = fast forward, "
-                        "F11 = fullscreen, Esc = quit\n", argv[0]);
+                        "keys: arrows, A/S/D = A/B/C, Z/X/C = X/Y/Z, Enter = Start, P = pause, "
+                        "Tab = fast forward, Alt+Enter (Cmd+Enter) = fullscreen, Esc = quit\n", argv[0]);
         return 2;
     }
     FILE *f = fopen(rom_path, "rb");
