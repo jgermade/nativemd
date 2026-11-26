@@ -168,8 +168,10 @@ pad 1, frames paced at 59.92 Hz or 49.70 Hz by `--region jp|us|eu` (Japan and Am
 60 Hz, Europe at 50 Hz; `us` by default; the region also sets the version register).
 VSync is on by default (`--no-vsync`, key V): with the display within 1.5 % of the game's
 rate it paces the game, otherwise the clock does and VSync only avoids tearing. The frame
-rate reached is in the window title; with Caps Lock on, a HUD on the picture shows it with
-the region and rate, VSync, the display's refresh, pause / fast forward. Built only when CMake
+rate reached is in the window title, with the most the machine could run (emulation and
+drawing time per frame, waits excluded; also printed at exit). With Caps Lock on, a HUD
+drawn at the window's resolution over the picture shows both, the region and rate, VSync,
+the display's refresh, pause / fast forward. Built only when CMake
 finds SDL2.
 `nmd-play ROM --idle START:END` plays a ROM with no C at all; a game's own runner passes its
 routine table and idle loop (the Sonic 1 client's `s1-play`). Keys: arrows, A / S / D =

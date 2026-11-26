@@ -7,8 +7,10 @@
  * VSync: with the display's refresh within 1.5 % of the game's rate, presenting with
  * VSync paces the game (no tearing, no drift beyond that 1.5 %); at other refresh rates
  * (144 Hz, 50 Hz...) VSync only avoids tearing and the clock keeps the game's own rate.
- * The frame rate actually reached shows in the title; with Caps Lock on, a HUD on the
- * picture shows it with the region and rate, VSync, the display's refresh, pause / fast.
+ * The frame rate reached and the most the machine could run (the engine's time per frame,
+ * waits excluded) show in the title; with Caps Lock on, a HUD drawn at the window's
+ * resolution (5x7 font, a dot per window pixel group) shows them with the region and
+ * rate, VSync, the display's refresh, pause / fast forward. The capacity is printed at exit.
  */
 #include <math.h>
 #include <stdio.h>
@@ -35,61 +37,110 @@ struct nmd_sdl {
     uint64_t            fps_t0;      /* frame rate measurement */
     unsigned            fps_frames;
     double              fps;
-    uint32_t            pic[320 * 240];   /* the picture with the overlay */
+    uint64_t            resumed;     /* when the engine got control back (end of present) */
+    uint64_t            work, work_total;   /* emulation + drawing time, no waits */
+    uint64_t            frames_total;
+    double              capacity;    /* frames per second the machine could run */
 };
 
-/* ---- The HUD (Caps Lock on): frame rate, region and rate, VSync, display ------------------ */
-/* 3x5 font: rows of 3 bits, top row first (octal digits). */
-static uint16_t glyph(char c)
-{
-    static const uint16_t digits[10] = { 075557, 022222, 071747, 071717, 055711,
-                                         074717, 074757, 071111, 075757, 075717 };
-    static const uint16_t letters[26] = {
-        025755, 065656, 034443, 065556, 074647, 074644, 034553, 055755, 072227, 011157, 055655, 044447,
-        057555, 065555, 025552, 065644, 025573, 065655, 034216, 072222, 055557, 055522, 055575, 055255,
-        055222, 071247 };
-    if (c >= '0' && c <= '9') return digits[c - '0'];
-    if (c >= 'A' && c <= 'Z') return letters[c - 'A'];
-    if (c == '.') return 000002;
-    if (c == ':') return 002020;
-    if (c == '-') return 000700;
-    if (c == '/') return 011244;
-    return 0;                                           /* space and the rest */
-}
+/* 5x7 font for the HUD: rows top first, bit 4 = left column. */
+static const char hud_chars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/()%x";
+static const uint8_t hud_font[][7] = {
+    { 0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E }, /* 0 */
+    { 0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E }, /* 1 */
+    { 0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F }, /* 2 */
+    { 0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E }, /* 3 */
+    { 0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02 }, /* 4 */
+    { 0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E }, /* 5 */
+    { 0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E }, /* 6 */
+    { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 }, /* 7 */
+    { 0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E }, /* 8 */
+    { 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C }, /* 9 */
+    { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }, /* A */
+    { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E }, /* B */
+    { 0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E }, /* C */
+    { 0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C }, /* D */
+    { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F }, /* E */
+    { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 }, /* F */
+    { 0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F }, /* G */
+    { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }, /* H */
+    { 0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E }, /* I */
+    { 0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C }, /* J */
+    { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 }, /* K */
+    { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F }, /* L */
+    { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 }, /* M */
+    { 0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11 }, /* N */
+    { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }, /* O */
+    { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 }, /* P */
+    { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D }, /* Q */
+    { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 }, /* R */
+    { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E }, /* S */
+    { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 }, /* T */
+    { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }, /* U */
+    { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04 }, /* V */
+    { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A }, /* W */
+    { 0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11 }, /* X */
+    { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 }, /* Y */
+    { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F }, /* Z */
+    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C }, /* . */
+    { 0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00 }, /* : */
+    { 0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00 }, /* - */
+    { 0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10 }, /* / */
+    { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 }, /* ( */
+    { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 }, /* ) */
+    { 0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03 }, /* % */
+    { 0x00, 0x00, 0x11, 0x0A, 0x04, 0x0A, 0x11 }, /* x */
+};
 
-static void hud_text(nmd_sdl *s, int width, int x0, int y0, const char *text)
+/* ---- The HUD (Caps Lock on), drawn at the window's resolution over the picture ---------- */
+static void hud_line(SDL_Renderer *r, int x0, int y0, int px, const char *text)
 {
-    const int scale = 2;
     for (int i = 0; text[i]; i++) {
-        uint16_t g = glyph(text[i]);
-        for (int y = -1; y <= 5; y++)                   /* a dark box under each glyph */
-            for (int x = -1; x <= 3; x++) {
-                bool on = y >= 0 && y < 5 && x >= 0 && x < 3 && (g >> ((4 - y) * 3 + (2 - x)) & 1);
-                for (int dy = 0; dy < scale; dy++)
-                    for (int dx = 0; dx < scale; dx++) {
-                        int px = x0 + (i * 4 + x) * scale + dx, py = y0 + y * scale + dy;
-                        if (px < 0 || px >= width || py < 0 || py >= 240) continue;
-                        uint32_t *p = &s->pic[py * 320 + px];
-                        *p = on ? 0xFFFFFF40u : (*p >> 2 & 0x3F3F3Fu) | 0xFF000000u;
-                    }
-            }
+        const char *at = text[i] == ' ' ? NULL : strchr(hud_chars, text[i]);
+        if (!at) continue;
+        const uint8_t *g = hud_font[at - hud_chars];
+        for (int y = 0; y < 7; y++)
+            for (int x = 0; x < 5; x++)
+                if (g[y] >> (4 - x) & 1) {
+                    SDL_Rect dot = { x0 + (i * 6 + x) * px, y0 + y * px, px, px };
+                    SDL_RenderFillRect(r, &dot);
+                }
     }
 }
 
-static void draw_hud(nmd_sdl *s, int width)
+static void draw_hud(nmd_sdl *s)
 {
-    char lines[5][40];
+    char lines[6][48];
     int n = 0;
-    snprintf(lines[n++], sizeof lines[0], "%.1f FPS", s->fps);
-    snprintf(lines[n++], sizeof lines[0], "%s %.2f HZ", s->region, 1.0 / s->frame_s);
-    snprintf(lines[n++], sizeof lines[0], "VSYNC %s", !s->vsync ? "OFF" : s->vsync_paces ? "ON" : "ON - CLOCK");
+    double rate = 1.0 / s->frame_s;
+    snprintf(lines[n++], sizeof lines[0], "FPS %.1f / %.2f", s->fps, rate);
+    if (s->capacity > 0)
+        snprintf(lines[n++], sizeof lines[0], "MAX %.0f FPS (%.1fx)", s->capacity, s->capacity / rate);
+    snprintf(lines[n++], sizeof lines[0], "REGION %s %s", s->region, rate < 55 ? "50 HZ" : "60 HZ");
+    snprintf(lines[n++], sizeof lines[0], "VSYNC %s", !s->vsync ? "OFF" : s->vsync_paces ? "ON" : "ON (CLOCK PACES)");
     snprintf(lines[n++], sizeof lines[0], "DISPLAY %d HZ", s->display_hz);
     if (s->paused) snprintf(lines[n++], sizeof lines[0], "PAUSE");
-    else if (s->fast_forward) snprintf(lines[n++], sizeof lines[0], "FAST");
+    else if (s->fast_forward) snprintf(lines[n++], sizeof lines[0], "FAST FORWARD");
+
+    SDL_Renderer *r = s->renderer;
+    SDL_RenderSetLogicalSize(r, 0, 0);                  /* window pixels from here */
+    int ow, oh;
+    SDL_GetRendererOutputSize(r, &ow, &oh);
+    int px = oh / 320 > 1 ? oh / 320 : 1, cols = 0;     /* glyph pixel: about 1/45 of the height per line */
+    for (int i = 0; i < n; i++) if ((int)strlen(lines[i]) > cols) cols = (int)strlen(lines[i]);
+    int pad = 4 * px, lh = 10 * px, w = cols * 6 * px + 2 * pad, h = n * lh + 2 * pad - 3 * px;
+    SDL_Rect panel = { ow - w - pad, pad, w, h };
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 170);
+    SDL_RenderFillRect(r, &panel);
     for (int i = 0; i < n; i++) {
-        int w = (int)strlen(lines[i]) * 8;
-        hud_text(s, width, width - w - 4, 4 + i * 14, lines[i]);
+        if (i == 0) SDL_SetRenderDrawColor(r, 255, 255, 96, 255);   /* the frame rate in yellow */
+        else SDL_SetRenderDrawColor(r, 230, 230, 230, 255);
+        hud_line(r, panel.x + pad, panel.y + pad + i * lh, px, lines[i]);
     }
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    SDL_RenderSetLogicalSize(r, 320, s->tex_h);
 }
 
 static void measure_fps(nmd_sdl *s)
@@ -99,10 +150,13 @@ static void measure_fps(nmd_sdl *s)
     s->fps_frames++;
     if (now - s->fps_t0 >= freq / 2) {                  /* twice a second */
         s->fps = s->fps_frames * (double)freq / (double)(now - s->fps_t0);
+        s->capacity = s->work ? s->fps_frames * (double)freq / (double)s->work : 0;
         s->fps_t0 = now;
         s->fps_frames = 0;
+        s->work = 0;
         char t[160];
-        snprintf(t, sizeof t, "%s - %.1f fps%s", s->title, s->fps, s->vsync ? " (vsync)" : "");
+        snprintf(t, sizeof t, "%s - %.1f fps (max %.0f)%s", s->title, s->fps, s->capacity,
+                 s->vsync ? " vsync" : "");
         SDL_SetWindowTitle(s->window, t);
     }
 }
@@ -173,23 +227,34 @@ static void draw(nmd_sdl *s, const uint32_t *argb, int width, int height)
         s->tex_h = height;
         SDL_RenderSetLogicalSize(s->renderer, 320, height);   /* 4:3 either way: H32 stretched */
     }
-    if (SDL_GetModState() & KMOD_CAPS) {                /* Caps Lock on: the HUD */
-        memcpy(s->pic, argb, (size_t)height * 320 * sizeof *argb);
-        draw_hud(s, width);
-        argb = s->pic;
-    }
     SDL_UpdateTexture(s->texture, NULL, argb, 320 * (int)sizeof *argb);
     SDL_RenderClear(s->renderer);
-    SDL_Rect dst = { 0, 0, 320, height };
-    SDL_RenderCopy(s->renderer, s->texture, NULL, &dst);
+    SDL_Rect src = { 0, 0, width, height }, dst = { 0, 0, 320, height };
+    SDL_RenderCopy(s->renderer, s->texture, &src, &dst);
+    if (SDL_GetModState() & KMOD_CAPS) draw_hud(s);     /* Caps Lock on: the HUD */
     SDL_RenderPresent(s->renderer);
 }
+
+static void pace(nmd_sdl *s, const uint32_t *argb, int width, int height);
 
 static void present(void *user, uint64_t frame, const uint32_t *argb, int width, int height)
 {
     (void)frame;
     nmd_sdl *s = user;
+    uint64_t now = SDL_GetPerformanceCounter();
+    if (s->resumed) {                                   /* the engine's work for this frame */
+        s->work += now - s->resumed;
+        s->work_total += now - s->resumed;
+        s->frames_total++;
+    }
     measure_fps(s);
+    pace(s, argb, width, height);
+    s->resumed = SDL_GetPerformanceCounter();
+}
+
+/* Show the frame, handle events and pause, then wait for the frame's time slot. */
+static void pace(nmd_sdl *s, const uint32_t *argb, int width, int height)
+{
     draw(s, argb, width, height);
     handle_events(s);
     while (s->paused && !s->quit) {                     /* P: hold the game here */
@@ -310,6 +375,11 @@ bool nmd_sdl_quit_requested(const nmd_sdl *s) { return s->quit; }
 void nmd_sdl_close(nmd_sdl *s)
 {
     if (!s) return;
+    if (s->frames_total)
+        fprintf(stderr, "nativemd: %llu frames; the machine could run %.0f frames per second (%.1fx)\n",
+                (unsigned long long)s->frames_total,
+                (double)s->frames_total * (double)SDL_GetPerformanceFrequency() / (double)s->work_total,
+                (double)s->frames_total * (double)SDL_GetPerformanceFrequency() / (double)s->work_total * s->frame_s);
     if (s->pad) SDL_GameControllerClose(s->pad);
     if (s->texture) SDL_DestroyTexture(s->texture);
     if (s->renderer) SDL_DestroyRenderer(s->renderer);
