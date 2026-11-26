@@ -140,6 +140,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     FILE *trace = NULL;
     if (trace_path && !(trace = fopen(trace_path, "w"))) { perror(trace_path); return 2; }
     nmd_trace_open(trace);
+    nmd_trace_set_c_stack((uint32_t)rom[0] << 24 | (uint32_t)rom[1] << 16 | (uint32_t)rom[2] << 8 | rom[3]);   /* the initial SSP: the oracle's stack filter, for the C */
     uint64_t done = nmd_run_frames(frames);
     nmd_trace_open(NULL);
     if (trace) fclose(trace);

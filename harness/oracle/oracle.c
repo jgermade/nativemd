@@ -35,6 +35,7 @@ void m68k_set_rte_instr_callback(void (*callback)(void));
  * with a fixed range. min_sp records the lowest A7 seen, for comparisons of RAM.
  */
 static uint32_t stack_top;            /* initial SSP (exclusive upper bound) */
+static bool     reset_started;        /* the hybrid handler has run the reset routine */
 static bool     stack_fixed;
 static uint32_t stack_lo, stack_hi;
 static uint32_t min_sp;
@@ -391,6 +392,7 @@ void oracle_setup(void)
     uint32_t ssp = be32(rom);
     stack_top = ssp & 0xFFFFFF;
     stack_fixed = false;
+    reset_started = false;
     min_sp = stack_top;
     have_idle = idle_have_last = in_exception = clr_read_pending = false;
     irq_depth = 0;
@@ -593,7 +595,7 @@ static void wr32_raw(uint32_t a, uint32_t v)
 }
 
 /* Runs addr from M68K's registers until it returns to the sentinel. */
-static bool run_routine(uint32_t addr, bool irq, uint64_t max_cycles, bool divert)
+static bool run_routine(uint32_t addr, bool irq, uint64_t max_cycles, bool divert, bool sentinel)
 {
     /* Musashi is not re-entrant: keep the context of an enclosing run. */
     unsigned ctx_size = m68k_context_size();
@@ -610,7 +612,7 @@ static bool run_routine(uint32_t addr, bool irq, uint64_t max_cycles, bool diver
         sp -= 6;
         nmd_bus_wr16_raw(sp, M68K.sr);
         wr32_raw(sp + 2, SENTINEL);
-    } else {
+    } else if (sentinel) {
         sp -= 4;
         wr32_raw(sp, SENTINEL);
     }
@@ -667,13 +669,18 @@ static bool run_routine(uint32_t addr, bool irq, uint64_t max_cycles, bool diver
 
 bool oracle_call(uint32_t addr, bool irq, uint64_t max_cycles)
 {
-    return run_routine(addr, irq, max_cycles, false);
+    return run_routine(addr, irq, max_cycles, false, true);
 }
 
 static bool hybrid_handler(uint32_t addr, bool is_interrupt)
 {
     if (nmd_trace_enabled()) nmd_trace_comment("c->asm %06X", addr);
-    return run_routine(addr, is_interrupt, hybrid_max_cycles, true);
+    /* The reset routine never returns: no sentinel, A7 at the initial SSP as on hardware
+     * (a sentinel would shift the stack filter by 4 bytes against the C's). */
+    bool reset = !is_interrupt && irq_depth == 0 && !reset_started &&
+                 (addr & 0xFFFFFF) == (be32(nmd_rom(NULL) + 4) & 0xFFFFFF);
+    if (reset) reset_started = true;
+    return run_routine(addr, is_interrupt, hybrid_max_cycles, true, !reset);
 }
 
 bool oracle_parse_rom_writes(const char *text, nmd_rom_writes *out)

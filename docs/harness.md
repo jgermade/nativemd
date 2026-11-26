@@ -70,6 +70,11 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
   PC-relative reads are. The vector fetch of an interrupt and accesses to the stack range
   (default: the 1 KB below the initial SSP, `--stack`) are dropped, because the C does not
   reproduce exception frames, `JSR`/`RTS` traffic or register saves.
+  `nmd-hybrid` applies the same window to the C's own accesses (`nmd_trace_set_c_stack`:
+  `[A7 - 4, initial SSP)`, A7 from `M68K`), so original code and C that write over the
+  stack in use (Sonic 1's boot clears all of RAM) give the same trace. The hybrid handler
+  runs the reset routine without a sentinel return address (it never returns), A7 at the
+  initial SSP as on hardware.
 - **Idle loop** (`--idle LABEL`): repeated identical reads inside the declared polling
   loop are collapsed, matching the collapsing of `wait_until` reads on the C side.
 - **Corrections to Musashi**: `CLR` to memory performs its read cycle (Musashi omits it;

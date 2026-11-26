@@ -291,11 +291,22 @@ void    nmd_bus_wr16_raw(uint32_t addr, uint16_t v) { bus_wr16(addr, v); }
 /* Public contract                                                           */
 /* ------------------------------------------------------------------------ */
 
+/* The C's accesses, with the optional stack filter (nmd_trace_set_c_stack). */
+static void c_trace(bool write, unsigned bits, uint32_t addr, uint32_t v)
+{
+    uint32_t top = nmd_trace_c_stack();
+    if (top) {
+        uint32_t sp = M68K.a[7] & 0xFFFFFF;
+        if (addr + 4 >= sp && addr < top) return;
+    }
+    nmd_trace_access(NMD_TRACE_M68K, write, bits, addr, v);
+}
+
 uint8_t m68k_rd8(uint32_t addr)
 {
     addr &= 0xFFFFFF;
     uint8_t v = (uint8_t)replayed(addr, 8, bus_rd8(addr));
-    nmd_trace_access(NMD_TRACE_M68K, false, 8, addr, v);
+    c_trace(false, 8, addr, v);
     return v;
 }
 
@@ -303,7 +314,7 @@ uint16_t m68k_rd16(uint32_t addr)
 {
     addr &= 0xFFFFFF;
     uint16_t v = (uint16_t)replayed(addr, 16, nmd_bus_rd16_raw(addr));
-    nmd_trace_access(NMD_TRACE_M68K, false, 16, addr, v);
+    c_trace(false, 16, addr, v);
     return v;
 }
 
@@ -317,14 +328,14 @@ uint32_t m68k_rd32(uint32_t addr)
 void m68k_wr8(uint32_t addr, uint8_t v)
 {
     addr &= 0xFFFFFF;
-    nmd_trace_access(NMD_TRACE_M68K, true, 8, addr, v);
+    c_trace(true, 8, addr, v);
     bus_wr8(addr, v);
 }
 
 void m68k_wr16(uint32_t addr, uint16_t v)
 {
     addr &= 0xFFFFFF;
-    nmd_trace_access(NMD_TRACE_M68K, true, 16, addr, v);
+    c_trace(true, 16, addr, v);
     bus_wr16(addr, v);
 }
 
