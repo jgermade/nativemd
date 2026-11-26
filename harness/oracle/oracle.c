@@ -23,6 +23,7 @@ void m68k_set_rte_instr_callback(void (*callback)(void));
 #define TRAMPOLINE     0x00BEEF10u /* PC parked here while the engine acts    */
 #define MCLK_PER_LINE  3420u
 #define LINES_NTSC     262u
+#define LINES_PAL      313u
 
 /* ---- filters and trace ---------------------------------------------------- */
 
@@ -556,7 +557,8 @@ bool oracle_run_frames(uint64_t frames)
         }
         vdp_begin_frame();
         unsigned active = vdp_active_lines();
-        for (unsigned line = 0; line < LINES_NTSC && pending_action != ACT_RETURNED; line++) {
+        unsigned lines = NMD.cfg.video == NMD_VIDEO_PAL ? LINES_PAL : LINES_NTSC;
+        for (unsigned line = 0; line < lines && pending_action != ACT_RETURNED; line++) {
             if (line < active) {
                 if (vdp_line(line)) hint_pending = true;
             } else if (line == active) {
@@ -679,6 +681,15 @@ bool oracle_parse_rom_writes(const char *text, nmd_rom_writes *out)
     if (!text) return false;
     if (!strcmp(text, "ignore")) { *out = NMD_ROM_WRITES_IGNORE; return true; }
     if (!strcmp(text, "fatal"))  { *out = NMD_ROM_WRITES_FATAL;  return true; }
+    return false;
+}
+
+bool oracle_parse_region(const char *text, nmd_video *video, bool *overseas)
+{
+    if (!text) return false;
+    if (!strcmp(text, "jp")) { *video = NMD_VIDEO_NTSC; *overseas = false; return true; }
+    if (!strcmp(text, "us")) { *video = NMD_VIDEO_NTSC; *overseas = true;  return true; }
+    if (!strcmp(text, "eu")) { *video = NMD_VIDEO_PAL;  *overseas = true;  return true; }
     return false;
 }
 

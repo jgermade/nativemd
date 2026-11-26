@@ -25,6 +25,8 @@
  *   --max-cycles N         routine mode limit (default 10000000)
  *   --rom-writes MODE      writes to ROM no mapper claims: ignore (default; traced, and
  *                          reported at the end) or fatal (with the PC and registers)
+ *   --region R             the console: jp (default; Japan, NTSC), us (overseas, NTSC),
+ *                          eu (overseas, PAL: 50 Hz, 313 lines)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,6 +90,8 @@ static uint32_t need_addr(const char *text)
 int main(int argc, char **argv)
 {
     nmd_rom_writes rom_writes = NMD_ROM_WRITES_IGNORE;
+    nmd_video video = NMD_VIDEO_NTSC;
+    bool overseas = false;
     const char *rom_path = NULL, *trace_path = NULL, *state_in = NULL, *state_out = NULL;
     const char *idle = NULL, *stack = NULL, *cov_path = NULL, *call = NULL, *input = NULL;
     const char *captures[64];
@@ -127,6 +131,9 @@ int main(int argc, char **argv)
         else if (OPT("--rom-writes"))  {
             if (!oracle_parse_rom_writes(v, &rom_writes)) { fprintf(stderr, "nmd-oracle: bad --rom-writes '%s' (ignore|fatal)\n", v); return 2; }
         }
+        else if (OPT("--region"))      {
+            if (!oracle_parse_region(v, &video, &overseas)) { fprintf(stderr, "nmd-oracle: bad --region '%s' (jp|us|eu)\n", v); return 2; }
+        }
         else if (strcmp(a, "--irq") == 0) irq = true;
         else if (a[0] != '-' && !rom_path) rom_path = a;
         else { fprintf(stderr, "nmd-oracle: bad argument '%s' (see oracle_main.c)\n", a); return 2; }
@@ -141,7 +148,7 @@ int main(int argc, char **argv)
     size_t rom_size;
     uint8_t *rom = read_file(rom_path, &rom_size);
     static const nmd_game no_game = { .name = "oracle" };
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = rom_writes, .no_render = true };
+    nmd_config cfg = { .video = video, .overseas = overseas, .rom_writes = rom_writes, .no_render = true };
     if (!nmd_init(&cfg, &no_game, rom, rom_size)) return 2;
     nmd_set_fatal_handler(fatal_handler);
     oracle_setup();

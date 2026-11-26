@@ -12,6 +12,7 @@
  *   --max-cycles  limit between two waits before giving up (default 50000000)
  *   --rom-writes  ignore (default; traced and reported at the end) or fatal
  *   --screenshot  N:FILE.png: the picture after N frames (repeatable)
+ *   --region      jp (default; Japan, NTSC), us (overseas, NTSC), eu (overseas, PAL 50 Hz)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,8 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     int nsyms = 0;
     uint64_t frames = 0, max_cycles = 0;
     nmd_rom_writes rom_writes = NMD_ROM_WRITES_IGNORE;
+    nmd_video video = NMD_VIDEO_NTSC;
+    bool overseas = false;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if      (!strcmp(a, "--frames") && v)     { frames = strtoull(v, NULL, 10); i++; }
@@ -69,6 +72,10 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
             nshots++;
             i++;
         }
+        else if (!strcmp(a, "--region") && v) {
+            if (!oracle_parse_region(v, &video, &overseas)) { fprintf(stderr, "nmd-hybrid: bad --region '%s' (jp|us|eu)\n", v); return 2; }
+            i++;
+        }
         else if (!strcmp(a, "--rom-writes") && v) {
             if (!oracle_parse_rom_writes(v, &rom_writes)) { fprintf(stderr, "nmd-hybrid: bad --rom-writes '%s' (ignore|fatal)\n", v); return 2; }
             i++;
@@ -79,7 +86,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
     if (!rom_path || !frames || !idle) {
         fprintf(stderr, "usage: nmd-hybrid ROM --frames N --idle START:END [--sym FILE] [--input FILE] "
                         "[--trace FILE] [--state-out FILE] [--max-cycles N] [--rom-writes ignore|fatal] "
-                        "[--screenshot N:FILE.png]...\n");
+                        "[--screenshot N:FILE.png]... [--region jp|us|eu]\n");
         return 2;
     }
 
@@ -110,7 +117,7 @@ int nmd_hybrid_main(int argc, char **argv, const nmd_game *game)
         fclose(in);
     }
     nmd_null_host host = { .script = { pads[0], pads[1] }, .script_len = { npads, npads } };
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .host = nmd_null_host_make(&host), .rom_writes = rom_writes,
+    nmd_config cfg = { .video = video, .overseas = overseas, .host = nmd_null_host_make(&host), .rom_writes = rom_writes,
                        .no_render = nshots == 0 };      /* draw only for screenshots */
     null_present = cfg.host.present_frame;
     cfg.host.present_frame = present;
