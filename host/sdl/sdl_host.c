@@ -7,7 +7,8 @@
  * VSync: with the display's refresh within 1.5 % of the game's rate, presenting with
  * VSync paces the game (no tearing, no drift beyond that 1.5 %); at other refresh rates
  * (144 Hz, 50 Hz...) VSync only avoids tearing and the clock keeps the game's own rate.
- * The frame rate actually reached shows in the title, and on the picture with F.
+ * The frame rate actually reached shows in the title; with Caps Lock on, a HUD on the
+ * picture shows it with the region and rate, VSync, the display's refresh, pause / fast.
  */
 #include <math.h>
 #include <stdio.h>
@@ -27,7 +28,9 @@ struct nmd_sdl {
     double              frame_s;     /* seconds per frame */
     uint64_t            next;        /* performance counter of the next frame */
     bool                quit, paused, fullscreen;
-    bool                vsync, vsync_paces, show_fps, fast_forward;
+    bool                vsync, vsync_paces, fast_forward;
+    int                 display_hz;
+    char                region[8];
     char                title[96];
     uint64_t            fps_t0;      /* frame rate measurement */
     unsigned            fps_frames;
@@ -35,24 +38,33 @@ struct nmd_sdl {
     uint32_t            pic[320 * 240];   /* the picture with the overlay */
 };
 
-/* ---- The frame rate on the picture: a 3x5 font for "0-9 . FPS" -------------------------- */
-static const uint16_t glyph3x5[14] = {
-    075557, 022222, 071747, 071717, 055711, 074717, 074757, 071111, 075757, 075717, /* 0-9 */
-    000002, 074744, 075744, 074717,                                                  /* . F P S */
-};
-
-static void overlay_fps(nmd_sdl *s, int width)
+/* ---- The HUD (Caps Lock on): frame rate, region and rate, VSync, display ------------------ */
+/* 3x5 font: rows of 3 bits, top row first (octal digits). */
+static uint16_t glyph(char c)
 {
-    char text[16];
-    snprintf(text, sizeof text, "%.1f FPS", s->fps);
-    int n = (int)strlen(text), scale = 2, x0 = width - n * 4 * scale - 4, y0 = 4;
-    for (int i = 0; i < n; i++) {
-        char c = text[i];
-        int g = c >= '0' && c <= '9' ? c - '0' : c == '.' ? 10 : c == 'F' ? 11 : c == 'P' ? 12 : c == 'S' ? 13 : -1;
-        if (g < 0) continue;
-        for (int y = -1; y <= 5; y++)                   /* shadow box, then the glyph */
+    static const uint16_t digits[10] = { 075557, 022222, 071747, 071717, 055711,
+                                         074717, 074757, 071111, 075757, 075717 };
+    static const uint16_t letters[26] = {
+        025755, 065656, 034443, 065556, 074647, 074644, 034553, 055755, 072227, 011157, 055655, 044447,
+        057555, 065555, 025552, 065644, 025573, 065655, 034216, 072222, 055557, 055522, 055575, 055255,
+        055222, 071247 };
+    if (c >= '0' && c <= '9') return digits[c - '0'];
+    if (c >= 'A' && c <= 'Z') return letters[c - 'A'];
+    if (c == '.') return 000002;
+    if (c == ':') return 002020;
+    if (c == '-') return 000700;
+    if (c == '/') return 011244;
+    return 0;                                           /* space and the rest */
+}
+
+static void hud_text(nmd_sdl *s, int width, int x0, int y0, const char *text)
+{
+    const int scale = 2;
+    for (int i = 0; text[i]; i++) {
+        uint16_t g = glyph(text[i]);
+        for (int y = -1; y <= 5; y++)                   /* a dark box under each glyph */
             for (int x = -1; x <= 3; x++) {
-                bool on = y >= 0 && y < 5 && x >= 0 && x < 3 && (glyph3x5[g] >> ((4 - y) * 3 + (2 - x)) & 1);
+                bool on = y >= 0 && y < 5 && x >= 0 && x < 3 && (g >> ((4 - y) * 3 + (2 - x)) & 1);
                 for (int dy = 0; dy < scale; dy++)
                     for (int dx = 0; dx < scale; dx++) {
                         int px = x0 + (i * 4 + x) * scale + dx, py = y0 + y * scale + dy;
@@ -61,6 +73,22 @@ static void overlay_fps(nmd_sdl *s, int width)
                         *p = on ? 0xFFFFFF40u : (*p >> 2 & 0x3F3F3Fu) | 0xFF000000u;
                     }
             }
+    }
+}
+
+static void draw_hud(nmd_sdl *s, int width)
+{
+    char lines[5][40];
+    int n = 0;
+    snprintf(lines[n++], sizeof lines[0], "%.1f FPS", s->fps);
+    snprintf(lines[n++], sizeof lines[0], "%s %.2f HZ", s->region, 1.0 / s->frame_s);
+    snprintf(lines[n++], sizeof lines[0], "VSYNC %s", !s->vsync ? "OFF" : s->vsync_paces ? "ON" : "ON - CLOCK");
+    snprintf(lines[n++], sizeof lines[0], "DISPLAY %d HZ", s->display_hz);
+    if (s->paused) snprintf(lines[n++], sizeof lines[0], "PAUSE");
+    else if (s->fast_forward) snprintf(lines[n++], sizeof lines[0], "FAST");
+    for (int i = 0; i < n; i++) {
+        int w = (int)strlen(lines[i]) * 8;
+        hud_text(s, width, width - w - 4, 4 + i * 14, lines[i]);
     }
 }
 
@@ -87,6 +115,7 @@ static void update_vsync(nmd_sdl *s)
     int hz = SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(s->window), &m) == 0 ? m.refresh_rate : 0;
     double rate = 1.0 / s->frame_s;
     s->vsync_paces = s->vsync && hz > 0 && fabs(hz - rate) / rate < 0.015;
+    s->display_hz = hz;
     fprintf(stderr, "nativemd: vsync %s (display %d Hz, game %.2f Hz%s)\n", s->vsync ? "on" : "off", hz, rate,
             s->vsync_paces ? ": vsync paces the game" : s->vsync ? ": the clock paces the game" : "");
 }
@@ -120,7 +149,6 @@ static void handle_events(nmd_sdl *s)
                      (e.key.keysym.mod & (KMOD_ALT | KMOD_GUI)))
                 toggle_fullscreen(s);                   /* Alt+Enter (Cmd+Enter on macOS) */
             else if (e.key.keysym.sym == SDLK_p) s->paused = !s->paused;
-            else if (e.key.keysym.sym == SDLK_f) s->show_fps = !s->show_fps;
             else if (e.key.keysym.sym == SDLK_v) { s->vsync = !s->vsync; update_vsync(s); }
             break;
         case SDL_CONTROLLERDEVICEADDED: open_first_pad(s); break;
@@ -145,9 +173,9 @@ static void draw(nmd_sdl *s, const uint32_t *argb, int width, int height)
         s->tex_h = height;
         SDL_RenderSetLogicalSize(s->renderer, 320, height);   /* 4:3 either way: H32 stretched */
     }
-    if (s->show_fps) {
+    if (SDL_GetModState() & KMOD_CAPS) {                /* Caps Lock on: the HUD */
         memcpy(s->pic, argb, (size_t)height * 320 * sizeof *argb);
-        overlay_fps(s, width);
+        draw_hud(s, width);
         argb = s->pic;
     }
     SDL_UpdateTexture(s->texture, NULL, argb, 320 * (int)sizeof *argb);
@@ -233,7 +261,8 @@ static uint64_t time_us(void *user)
     return SDL_GetPerformanceCounter() * 1000000u / SDL_GetPerformanceFrequency();
 }
 
-nmd_sdl *nmd_sdl_open(const char *title, int scale, bool fullscreen, bool vsync, nmd_video video)
+nmd_sdl *nmd_sdl_open(const char *title, const char *region, int scale, bool fullscreen, bool vsync,
+                      nmd_video video)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) != 0) {
         fprintf(stderr, "nativemd: SDL_Init: %s\n", SDL_GetError());
@@ -261,6 +290,8 @@ nmd_sdl *nmd_sdl_open(const char *title, int scale, bool fullscreen, bool vsync,
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
     SDL_RenderSetIntegerScale(s->renderer, SDL_FALSE);
     snprintf(s->title, sizeof s->title, "%s", title);
+    for (int i = 0; i < 7 && region && region[i]; i++)
+        s->region[i] = (char)(region[i] >= 'a' && region[i] <= 'z' ? region[i] - 32 : region[i]);
     s->vsync = vsync;
     update_vsync(s);
     if (fullscreen) toggle_fullscreen(s);

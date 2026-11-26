@@ -47,7 +47,7 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
                         "[--idle START:END] [--sym FILE] [--frames N] [--max-cycles N]\n"
                         "  --region  jp (60 Hz, Japan), us (60 Hz, default), eu (50 Hz; --pal)\n"
                         "keys: arrows, A/S/D = A/B/C, Z/X/C = X/Y/Z, Enter = Start, P = pause, "
-                        "Tab = fast forward, F = FPS on screen, V = vsync, Alt+Enter (Cmd+Enter) = fullscreen, "
+                        "Tab = fast forward, Caps Lock = HUD (FPS, vsync, rate), V = vsync, Alt+Enter (Cmd+Enter) = fullscreen, "
                         "Esc = quit\n", argv[0]);
         return 2;
     }
@@ -62,7 +62,7 @@ int nmd_play_main(int argc, char **argv, const nmd_game *game, const char *defau
 
     char title[96];
     snprintf(title, sizeof title, "%s - nativemd", game->name);
-    nmd_sdl *sdl = nmd_sdl_open(title, scale, fullscreen, vsync, video);
+    nmd_sdl *sdl = nmd_sdl_open(title, region, scale, fullscreen, vsync, video);
     if (!sdl) return 2;
     nmd_config cfg = { .video = video, .overseas = overseas, .host = nmd_sdl_host(sdl) };
     if (!nmd_init(&cfg, game, rom, rom_size)) return 2;
