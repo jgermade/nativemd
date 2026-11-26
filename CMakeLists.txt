@@ -79,8 +79,15 @@ target_compile_options(nmd_harness PRIVATE ${NMD_WARNINGS})
 # Desktop host and interactive play (optional: SDL2).
 find_package(SDL2 QUIET)
 if(SDL2_FOUND)
-    add_library(nmd_sdl STATIC host/sdl/sdl_host.c harness/play.c)
-    target_include_directories(nmd_sdl PUBLIC host harness)
+    # The HUD's font (Inter, OFL), embedded as a C array.
+    set(NMD_FONT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/inter/Inter-Medium.ttf)
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/inter_medium.c
+        COMMAND ${CMAKE_COMMAND} -DIN=${NMD_FONT} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/inter_medium.c
+                -DNAME=nmd_inter_medium -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
+        DEPENDS ${NMD_FONT} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
+    add_library(nmd_sdl STATIC host/sdl/sdl_host.c host/sdl/hud_text.c harness/play.c
+                ${CMAKE_CURRENT_BINARY_DIR}/inter_medium.c)
+    target_include_directories(nmd_sdl PUBLIC host harness PRIVATE third_party)
     target_link_libraries(nmd_sdl PUBLIC nmd_harness SDL2::SDL2)
     target_compile_options(nmd_sdl PRIVATE ${NMD_WARNINGS})
     add_executable(nmd-play harness/play_main.c)

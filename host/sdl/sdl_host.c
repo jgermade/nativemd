@@ -9,7 +9,7 @@
  * (144 Hz, 50 Hz...) VSync only avoids tearing and the clock keeps the game's own rate.
  * The frame rate reached and the most the machine could run (the engine's time per frame,
  * waits excluded) show in the title; with Caps Lock on, a HUD drawn at the window's
- * resolution (5x7 font, a dot per window pixel group) shows them with the region and
+ * resolution (Inter, antialiased: hud_text.c) shows them with the region and
  * rate, VSync, the display's refresh, pause / fast forward. The capacity is printed at exit.
  */
 #include <math.h>
@@ -20,6 +20,7 @@
 #include <SDL.h>
 
 #include "sdl_host.h"
+#include "hud_text.h"
 
 struct nmd_sdl {
     SDL_Window         *window;
@@ -41,105 +42,54 @@ struct nmd_sdl {
     uint64_t            work, work_total;   /* emulation + drawing time, no waits */
     uint64_t            frames_total;
     double              capacity;    /* frames per second the machine could run */
+    hud_font           *font;        /* the HUD's text at its current size */
 };
 
-/* 5x7 font for the HUD: rows top first, bit 4 = left column. */
-static const char hud_chars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/()%x";
-static const uint8_t hud_font[][7] = {
-    { 0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E }, /* 0 */
-    { 0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E }, /* 1 */
-    { 0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F }, /* 2 */
-    { 0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E }, /* 3 */
-    { 0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02 }, /* 4 */
-    { 0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E }, /* 5 */
-    { 0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E }, /* 6 */
-    { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 }, /* 7 */
-    { 0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E }, /* 8 */
-    { 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C }, /* 9 */
-    { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }, /* A */
-    { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E }, /* B */
-    { 0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E }, /* C */
-    { 0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C }, /* D */
-    { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F }, /* E */
-    { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 }, /* F */
-    { 0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F }, /* G */
-    { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }, /* H */
-    { 0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E }, /* I */
-    { 0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C }, /* J */
-    { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 }, /* K */
-    { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F }, /* L */
-    { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 }, /* M */
-    { 0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11 }, /* N */
-    { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }, /* O */
-    { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 }, /* P */
-    { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D }, /* Q */
-    { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 }, /* R */
-    { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E }, /* S */
-    { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 }, /* T */
-    { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }, /* U */
-    { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04 }, /* V */
-    { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A }, /* W */
-    { 0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11 }, /* X */
-    { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 }, /* Y */
-    { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F }, /* Z */
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C }, /* . */
-    { 0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00 }, /* : */
-    { 0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00 }, /* - */
-    { 0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10 }, /* / */
-    { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 }, /* ( */
-    { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 }, /* ) */
-    { 0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03 }, /* % */
-    { 0x00, 0x00, 0x11, 0x0A, 0x04, 0x0A, 0x11 }, /* x */
-};
-
-/* ---- The HUD (Caps Lock on), drawn at the window's resolution over the picture ---------- */
-static void hud_line(SDL_Renderer *r, int x0, int y0, int px, const char *text)
-{
-    for (int i = 0; text[i]; i++) {
-        const char *at = text[i] == ' ' ? NULL : strchr(hud_chars, text[i]);
-        if (!at) continue;
-        const uint8_t *g = hud_font[at - hud_chars];
-        for (int y = 0; y < 7; y++)
-            for (int x = 0; x < 5; x++)
-                if (g[y] >> (4 - x) & 1) {
-                    SDL_Rect dot = { x0 + (i * 6 + x) * px, y0 + y * px, px, px };
-                    SDL_RenderFillRect(r, &dot);
-                }
-    }
-}
-
+/* ---- The HUD (Caps Lock on): Inter text drawn at the window's resolution over the picture -- */
 static void draw_hud(nmd_sdl *s)
 {
-    char lines[6][48];
+    char rows[7][2][40];
     int n = 0;
     double rate = 1.0 / s->frame_s;
-    snprintf(lines[n++], sizeof lines[0], "FPS %.1f / %.2f", s->fps, rate);
-    if (s->capacity > 0)
-        snprintf(lines[n++], sizeof lines[0], "MAX %.0f FPS (%.1fx)", s->capacity, s->capacity / rate);
-    snprintf(lines[n++], sizeof lines[0], "REGION %s %s", s->region, rate < 55 ? "50 HZ" : "60 HZ");
-    snprintf(lines[n++], sizeof lines[0], "VSYNC %s", !s->vsync ? "OFF" : s->vsync_paces ? "ON" : "ON (CLOCK PACES)");
-    snprintf(lines[n++], sizeof lines[0], "DISPLAY %d HZ", s->display_hz);
-    if (s->paused) snprintf(lines[n++], sizeof lines[0], "PAUSE");
-    else if (s->fast_forward) snprintf(lines[n++], sizeof lines[0], "FAST FORWARD");
+#define ROW(label, ...) do { snprintf(rows[n][0], 40, "%s", label); snprintf(rows[n][1], 40, __VA_ARGS__); n++; } while (0)
+    ROW("FPS", "%.1f / %.2f", s->fps, rate);
+    if (s->capacity > 0) ROW("Max", "%.0f fps (%.1fx)", s->capacity, s->capacity / rate);
+    ROW("Region", "%s, %s Hz", s->region, rate < 55 ? "50" : "60");
+    ROW("VSync", "%s", !s->vsync ? "off" : s->vsync_paces ? "on" : "on (clock paces)");
+    ROW("Display", "%d Hz", s->display_hz);
+    if (s->paused) ROW("", "Paused");
+    else if (s->fast_forward) ROW("", "Fast forward");
+#undef ROW
 
     SDL_Renderer *r = s->renderer;
     SDL_RenderSetLogicalSize(r, 0, 0);                  /* window pixels from here */
     int ow, oh;
     SDL_GetRendererOutputSize(r, &ow, &oh);
-    int px = oh / 320 > 1 ? oh / 320 : 1, cols = 0;     /* glyph pixel: about 1/45 of the height per line */
-    for (int i = 0; i < n; i++) if ((int)strlen(lines[i]) > cols) cols = (int)strlen(lines[i]);
-    int pad = 4 * px, lh = 10 * px, w = cols * 6 * px + 2 * pad, h = n * lh + 2 * pad - 3 * px;
-    SDL_Rect panel = { ow - w - pad, pad, w, h };
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r, 0, 0, 0, 170);
-    SDL_RenderFillRect(r, &panel);
-    for (int i = 0; i < n; i++) {
-        if (i == 0) SDL_SetRenderDrawColor(r, 255, 255, 96, 255);   /* the frame rate in yellow */
-        else SDL_SetRenderDrawColor(r, 230, 230, 230, 255);
-        hud_line(r, panel.x + pad, panel.y + pad + i * lh, px, lines[i]);
+    int px = oh / 36 > 12 ? oh / 36 : 12;
+    s->font = hud_font_get(r, s->font, px);
+    if (s->font) {
+        float lw = 0, vw = 0, gap = (float)px * 0.8f, pad = (float)px * 0.7f, lh = hud_line_height(s->font);
+        for (int i = 0; i < n; i++) {
+            float a = hud_text_width(s->font, rows[i][0]), b = hud_text_width(s->font, rows[i][1]);
+            if (a > lw) lw = a;
+            if (b > vw) vw = b;
+        }
+        float w = lw + gap + vw + 2 * pad, h = (float)n * lh + 2 * pad - lh * 0.15f;
+        SDL_FRect panel = { (float)ow - w - pad, pad, w, h };
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 10, 12, 20, 180);
+        SDL_RenderFillRectF(r, &panel);
+        for (int i = 0; i < n; i++) {
+            float y = panel.y + pad + (float)i * lh;
+            SDL_SetRenderDrawColor(r, 160, 170, 190, 255);                 /* labels */
+            hud_text_draw(r, s->font, panel.x + pad, y, rows[i][0]);
+            if (i == 0) SDL_SetRenderDrawColor(r, 255, 230, 90, 255);     /* the frame rate */
+            else SDL_SetRenderDrawColor(r, 245, 245, 250, 255);
+            hud_text_draw(r, s->font, panel.x + pad + lw + gap, y, rows[i][1]);
+        }
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     }
     SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     SDL_RenderSetLogicalSize(r, 320, s->tex_h);
 }
 
@@ -357,6 +307,9 @@ nmd_sdl *nmd_sdl_open(const char *title, const char *region, int scale, bool ful
     snprintf(s->title, sizeof s->title, "%s", title);
     for (int i = 0; i < 7 && region && region[i]; i++)
         s->region[i] = (char)(region[i] >= 'a' && region[i] <= 'z' ? region[i] - 32 : region[i]);
+    if (!strcmp(s->region, "US")) snprintf(s->region, sizeof s->region, "USA");
+    else if (!strcmp(s->region, "JP")) snprintf(s->region, sizeof s->region, "Japan");
+    else if (!strcmp(s->region, "EU")) snprintf(s->region, sizeof s->region, "Europe");
     s->vsync = vsync;
     update_vsync(s);
     if (fullscreen) toggle_fullscreen(s);
@@ -381,6 +334,7 @@ void nmd_sdl_close(nmd_sdl *s)
                 (double)s->frames_total * (double)SDL_GetPerformanceFrequency() / (double)s->work_total,
                 (double)s->frames_total * (double)SDL_GetPerformanceFrequency() / (double)s->work_total * s->frame_s);
     if (s->pad) SDL_GameControllerClose(s->pad);
+    hud_font_free(s->font);
     if (s->texture) SDL_DestroyTexture(s->texture);
     if (s->renderer) SDL_DestroyRenderer(s->renderer);
     if (s->window) SDL_DestroyWindow(s->window);
