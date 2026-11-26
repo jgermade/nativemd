@@ -161,7 +161,17 @@ static bool run_candidate(const suite *s, const char *state, const run *expected
     }
     mem = open_memstream(&out->trace, &out->trace_len);
     nmd_trace_open(mem);
-    call_routine(s->addr);
+    if (s->irq) {
+        /* As the engine takes an interrupt (machine.c take_interrupt): M68K is saved
+         * around the handler and restored after it, like the 68000's exception frame and
+         * RTE (the oracle side returns through its RTE). The state was captured at the
+         * handler's entry, so SR already holds the handler's mask. */
+        m68k_regs saved = M68K;
+        call_routine(s->addr);
+        M68K = saved;
+    } else {
+        call_routine(s->addr);
+    }
     nmd_trace_open(NULL);
     fclose(mem);
     mem = NULL;
