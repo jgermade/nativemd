@@ -94,6 +94,7 @@ int main(int argc, char **argv)
     bool overseas = false;
     const char *rom_path = NULL, *trace_path = NULL, *state_in = NULL, *state_out = NULL;
     const char *idle = NULL, *stack = NULL, *cov_path = NULL, *call = NULL, *input = NULL;
+    const char *resume = NULL;
     const char *captures[64];
     int ncaptures = 0;
     const char *capture_dir = ".";
@@ -112,6 +113,7 @@ int main(int argc, char **argv)
         else if (OPT("--state"))       state_in = v;
         else if (OPT("--state-out"))   state_out = v;
         else if (OPT("--call"))        call = v;
+        else if (OPT("--pc"))          resume = v;
         else if (OPT("--input"))       input = v;
         else if (OPT("--sym"))         {
             if (nsyms == 4) { fprintf(stderr, "nmd-oracle: more than 4 --sym\n"); return 2; }
@@ -139,8 +141,8 @@ int main(int argc, char **argv)
         else { fprintf(stderr, "nmd-oracle: bad argument '%s' (see oracle_main.c)\n", a); return 2; }
 #undef OPT
     }
-    if (!rom_path || (!frames && !call) || (frames && call) || (call && !state_in)) {
-        fprintf(stderr, "usage: nmd-oracle ROM --frames N [opts]\n"
+    if (!rom_path || (!frames && !call) || (frames && call) || (call && !state_in) || (frames && state_in && !resume) || (resume && !frames)) {
+        fprintf(stderr, "usage: nmd-oracle ROM --frames N [--state IN.nmds --pc ADDR] [opts]\n"
                         "       nmd-oracle ROM --state IN.nmds --call ADDR [--irq] [opts]\n");
         return 2;
     }
@@ -185,7 +187,7 @@ int main(int argc, char **argv)
     FILE *trace = NULL;
     if (trace_path && !(trace = fopen(trace_path, "w"))) { perror(trace_path); return 2; }
     nmd_trace_open(trace);
-    bool ok = frames ? oracle_run_frames(frames) : oracle_call(need_addr(call), irq, max_cycles);
+    bool ok = frames ? oracle_run_frames(frames, resume ? need_addr(resume) : 0) : oracle_call(need_addr(call), irq, max_cycles);
     nmd_trace_open(NULL);
     if (trace) fclose(trace);
     nmd_rom_writes_report(stderr, "nmd-oracle");
