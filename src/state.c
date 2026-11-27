@@ -13,7 +13,14 @@
  *   Z80 control:  u8 busreq, u8 reset, u8 psg_last, u8 pad, u32 bank,
  *                 u8 ym_addr[2], u8 ym_reg[2][256]
  * Version 1 files load with the latches at their reset values.
+ *
+ * Delta files ("NMDD", for the many states a fuzzer derives from one base): the
+ * bytes of a state file given as its base's bytes with patches:
+ *   "NMDD", u16 version (1), u16 base path length, the base path (absolute; an NMDS
+ *   file), u32 patch count, then per patch: u32 offset, u16 length, the bytes.
+ * nmd_state_read reads both kinds; nmd_state_write_delta writes one.
  */
+#define _XOPEN_SOURCE 700   /* realpath */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,10 +48,8 @@ static unsigned get16(reader *r) { unsigned hi = get8(r); return hi << 8 | get8(
 static uint32_t get32(reader *r) { uint32_t hi = get16(r); return hi << 16 | get16(r); }
 static void getn(reader *r, void *p, size_t n) { if (fread(p, 1, n, r->f) != n) r->ok = false; }
 
-bool nmd_state_write(const char *path, const nmd_state_image *s)
+static bool write_to(FILE *f, const nmd_state_image *s)
 {
-    FILE *f = fopen(path, "wb");
-    if (!f) return false;
     putn(f, "NMDS", 4);
     put16(f, STATE_VERSION);
     put16(f, 0);
@@ -70,8 +75,102 @@ bool nmd_state_write(const char *path, const nmd_state_image *s)
     put32(f, s->z80_bank);
     putn(f, s->ym_addr, 2);
     putn(f, s->ym_reg, sizeof s->ym_reg);
+    return !ferror(f);
+}
 
-    bool ok = !ferror(f);
+bool nmd_state_write(const char *path, const nmd_state_image *s)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) return false;
+    bool ok = write_to(f, s);
+    return fclose(f) == 0 && ok;
+}
+
+/* The whole file at path, malloc'd; NULL if it cannot be read. */
+static uint8_t *slurp(const char *path, size_t *len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    size_t cap = 1 << 18, n = 0;
+    uint8_t *b = malloc(cap);
+    while (b) {
+        n += fread(b + n, 1, cap - n, f);
+        if (n < cap) break;
+        uint8_t *nb = realloc(b, cap *= 2);
+        if (!nb) { free(b); b = NULL; }
+        else b = nb;
+    }
+    bool err = ferror(f);
+    fclose(f);
+    if (err) { free(b); return NULL; }
+    *len = n;
+    return b;
+}
+
+
+/* A delta file's bytes into the state file's bytes (malloc'd), or NULL. */
+static uint8_t *resolve_delta(const uint8_t *d, size_t dlen, size_t *len)
+{
+    if (dlen < 8 || be16(d + 4) != 1) return NULL;
+    size_t plen = be16(d + 6);
+    if (8 + plen + 4 > dlen || plen >= 4096) return NULL;
+    char base[4096];
+    memcpy(base, d + 8, plen);
+    base[plen] = 0;
+    uint8_t *b = slurp(base, len);
+    if (!b || *len < 4 || memcmp(b, "NMDS", 4) != 0) { free(b); return NULL; }
+    size_t pos = 8 + plen;
+    uint32_t count = be32(d + pos);
+    pos += 4;
+    for (uint32_t i = 0; i < count; i++) {
+        if (pos + 6 > dlen) { free(b); return NULL; }
+        uint32_t off = be32(d + pos);
+        size_t n = be16(d + pos + 4);
+        pos += 6;
+        if (pos + n > dlen || off + n > *len) { free(b); return NULL; }
+        memcpy(b + off, d + pos, n);
+        pos += n;
+    }
+    return b;
+}
+
+bool nmd_state_write_delta(const char *path, const char *base, const nmd_state_image *s)
+{
+    char abs[4096];
+    if (!realpath(base, abs)) return false;
+    size_t blen, nlen = 0;
+    uint8_t *b = slurp(abs, &blen);
+    if (!b || blen < 4 || memcmp(b, "NMDS", 4) != 0) { free(b); return nmd_state_write(path, s); }   /* no plain base */
+    char *mem = NULL;
+    FILE *m = open_memstream(&mem, &nlen);
+    if (!m) { free(b); return false; }
+    bool ok = write_to(m, s);
+    ok = fclose(m) == 0 && ok;
+    if (!ok || nlen != blen) { free(b); free(mem); return ok && nmd_state_write(path, s); }
+    const uint8_t *n = (const uint8_t *)mem;
+    FILE *f = fopen(path, "wb");
+    if (!f) { free(b); free(mem); return false; }
+    size_t plen = strlen(abs);
+    putn(f, "NMDD", 4); put16(f, 1); put16(f, (unsigned)plen); putn(f, abs, plen);
+    long count_at = ftell(f);
+    put32(f, 0);
+    uint32_t count = 0;
+    for (size_t i = 0; i < nlen;) {
+        if (n[i] == b[i]) { i++; continue; }
+        size_t j = i, last = i;                         /* a run, through gaps of under 8 equal bytes */
+        while (j < nlen && j - i < 0xFFFF && j - last <= 8) {
+            if (n[j] != b[j]) last = j;
+            j++;
+        }
+        size_t end = last + 1;
+        put32(f, (uint32_t)i); put16(f, (unsigned)(end - i)); putn(f, n + i, end - i);
+        count++;
+        i = end;
+    }
+    fseek(f, count_at, SEEK_SET);
+    put32(f, count);
+    ok = !ferror(f);
+    free(b); free(mem);
     return fclose(f) == 0 && ok;
 }
 
@@ -87,8 +186,19 @@ static void reset_latches(nmd_state_image *s)
 
 bool nmd_state_read(const char *path, nmd_state_image *s)
 {
-    FILE *f = fopen(path, "rb");
-    if (!f) return false;
+    size_t len;
+    uint8_t *buf = slurp(path, &len);
+    if (!buf) return false;
+    if (len >= 4 && memcmp(buf, "NMDD", 4) == 0) {
+        size_t rlen;
+        uint8_t *r2 = resolve_delta(buf, len, &rlen);
+        free(buf);
+        if (!r2) return false;
+        buf = r2;
+        len = rlen;
+    }
+    FILE *f = fmemopen(buf, len, "rb");
+    if (!f) { free(buf); return false; }
     reader r = { f, true };
     char magic[4];
     getn(&r, magic, 4);
@@ -96,6 +206,7 @@ bool nmd_state_read(const char *path, nmd_state_image *s)
     (void)get16(&r);
     if (!r.ok || memcmp(magic, "NMDS", 4) != 0 || version < 1 || version > STATE_VERSION) {
         fclose(f);
+        free(buf);
         return false;
     }
     for (int i = 0; i < 8; i++) s->regs.d[i] = get32(&r);
@@ -123,6 +234,7 @@ bool nmd_state_read(const char *path, nmd_state_image *s)
         getn(&r, s->ym_reg, sizeof s->ym_reg);
     }
     fclose(f);
+    free(buf);
     return r.ok;
 }
 

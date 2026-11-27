@@ -48,6 +48,13 @@ registers, last PSG write. Version-1 files still load (latches at reset values).
 In C: `nmd_state_capture` / `nmd_state_apply` (machine ↔ `nmd_state_image`),
 `nmd_state_write` / `nmd_state_read` (image ↔ file), `nmd_state_save` / `nmd_state_load`.
 
+Delta files (`NMDD`): a state given as the bytes that differ from a plain base file (whose
+absolute path it stores; layout at the top of `src/state.c`). `nmd_state_read` (and so
+every tool and `nmd_state_load`) reads both kinds; `nmd_state_write_delta` writes one,
+`nmd-statefuzz --delta` writes its outputs that way. A fuzzed state is then a few hundred
+bytes instead of ~140 KB: games derive hundreds of thousands of states for their suites.
+The base must stay in place while its deltas are used.
+
 ## Oracle: `nmd-oracle`
 
 Musashi (MIT, `third_party/musashi`) runs the ROM's original 68000 code; the **nativemd

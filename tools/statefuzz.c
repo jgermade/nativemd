@@ -18,6 +18,8 @@
  *   --value fixed value in every generated state
  *   --count number of states when there is no --sweep (default 64)
  *   --seed  PRNG seed (default 1): runs are reproducible
+ *   --delta write delta files (NMDD) against BASE: a few hundred bytes each instead
+ *           of ~140 KB (BASE must stay where it is while they are used)
  *
  * Only the selected part of a register changes (".w" keeps the high word), the
  * same way the routine's input would be loaded by its callers.
@@ -128,12 +130,13 @@ int main(int argc, char **argv)
     const char *base = NULL, *out = NULL, *name = "fuzz";
     unsigned count = 64;
     field sweep;
-    bool have_sweep = false;
+    bool have_sweep = false, delta = false;
     field rnd[16], fixed[16];
     int nrnd = 0, nfixed = 0;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if      (!strcmp(a, "--out") && v)   { out = v; i++; }
+        else if (!strcmp(a, "--delta"))      delta = true;
         else if (!strcmp(a, "--name") && v)  { name = v; i++; }
         else if (!strcmp(a, "--count") && v) { count = (unsigned)strtoul(v, NULL, 10); i++; }
         else if (!strcmp(a, "--seed") && v)  { rng = strtoull(v, NULL, 10) | 1; i++; }
@@ -179,7 +182,7 @@ int main(int argc, char **argv)
             if (have_sweep && sweep.ram == (pass == 1)) apply(s, &sweep, field_value(&sweep, k));
         }
         snprintf(path, sizeof path, "%s/%s.%05llu.nmds", out, name, (unsigned long long)k);
-        if (!nmd_state_write(path, s)) { perror(path); return 2; }
+        if (!(delta ? nmd_state_write_delta(path, base, s) : nmd_state_write(path, s))) { perror(path); return 2; }
     }
     printf("nmd-statefuzz: %llu state(s) in %s\n", (unsigned long long)n, out);
     free(s0);

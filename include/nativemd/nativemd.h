@@ -123,6 +123,8 @@ void nmd_state_capture(nmd_state_image *out);
 void nmd_state_apply(const nmd_state_image *in);
 bool nmd_state_write(const char *path, const nmd_state_image *in);
 bool nmd_state_read(const char *path, nmd_state_image *out); /* versions 1 and 2 */
+/* A delta file (NMDD) against the NMDS file base: only the bytes that differ. */
+bool nmd_state_write_delta(const char *path, const char *base, const nmd_state_image *in);
 
 /*
  * Routines without C. When call_routine / jump_routine, an interrupt or the

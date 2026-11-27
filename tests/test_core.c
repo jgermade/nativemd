@@ -291,6 +291,30 @@ static void test_state_v2(void)
     remove(path);
 }
 
+static void test_state_delta(void)
+{
+    setup();
+    m68k_wr16(0xFF1000, 0x1234);
+    const char *base = "test_core_base.nmds", *delta = "test_core_delta.nmds";
+    CHECK(nmd_state_save(base), "save the base");
+    static nmd_state_image img, back;
+    CHECK(nmd_state_read(base, &img), "read the base");
+    img.ram[0x1000] = 0xAB;                                 /* a few changes */
+    img.ram[0xFFFF] = 0xCD;
+    img.regs.d[3] = 0xDEADBEEF;
+    CHECK(nmd_state_write_delta(delta, base, &img), "write a delta");
+    FILE *f = fopen(delta, "rb");
+    long size = -1;
+    if (f) { fseek(f, 0, SEEK_END); size = ftell(f); fclose(f); }
+    CHECK(size > 0 && size < 1024, "the delta is small");
+    CHECK(nmd_state_read(delta, &back), "read the delta");
+    CHECK(memcmp(&img, &back, sizeof img) == 0, "delta round trip");
+    CHECK(nmd_state_load(delta), "load the delta");
+    CHECK(m68k_rd8(0xFF1000) == 0xAB && m68k_rd8(0xFF1001) == 0x34, "the delta applied");
+    remove(delta);
+    remove(base);
+}
+
 int main(void)
 {
     test_ram();
@@ -302,6 +326,7 @@ int main(void)
     test_state();
     test_replay();
     test_state_v2();
+    test_state_delta();
     nmd_shutdown();
     if (failures) { fprintf(stderr, "%d failure(s)\n", failures); return 1; }
     printf("test_core: ok\n");
