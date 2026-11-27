@@ -44,8 +44,13 @@ void oracle_set_capture(const char *dir, unsigned max_per_addr);
 void oracle_set_capture_every(unsigned every);
 unsigned oracle_captured(void);
 
-/* Reset and run with NTSC line timing until the RTE of the N-th VINT. */
-bool oracle_run_frames(uint64_t frames);
+/*
+ * Reset and run with NTSC line timing until the RTE of the N-th VINT. With resume_pc
+ * != 0 there is no reset: the run starts at resume_pc with the engine's registers and
+ * state (a state saved at the end of a frames run, where the main code waits in its
+ * idle loop: resume_pc is that loop).
+ */
+bool oracle_run_frames(uint64_t frames, uint32_t resume_pc);
 
 /*
  * Lag frames of the last oracle_run_frames (needs an idle loop): VINTs taken

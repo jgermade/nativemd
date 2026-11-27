@@ -58,7 +58,12 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
 - **Frames mode** (`--frames N`): reset, then NTSC line timing (262 lines × 3420 master
   clocks, 68000 at /7). The VDP raises HINT per line and VINT at the end of active display;
   the run stops right after the `RTE` of the N-th VINT handler, the point where the engine's
-  `nmd_run_frames(N)` stops.
+  `nmd_run_frames(N)` stops. `--state S --pc ADDR` resumes instead of resetting: the
+  registers and the machine come from S and the CPU starts at ADDR. A state saved at the
+  end of a frames run (`--state-out`) has no PC; there the main code of a game in sync
+  waits in its idle loop, so ADDR is that loop (`--idle`'s start). Used to start a run
+  from a patched level state (Sonic 1: `teleport.py`). `--state` without `--pc` in this
+  mode is an error.
 - **Routine mode** (`--state S --call ADDR [--irq]`): load a state, push a sentinel return
   address (or an exception frame for an interrupt handler) and run until it returns. With
   `--irq` the suite runs the C as the engine takes an interrupt: `M68K` is saved before the

@@ -537,7 +537,7 @@ static void sample_pads(uint64_t frame)
     }
 }
 
-bool oracle_run_frames(uint64_t frames)
+bool oracle_run_frames(uint64_t frames, uint32_t resume_pc)
 {
     frames_mode = true;
     vint_target = frames;
@@ -547,6 +547,10 @@ bool oracle_run_frames(uint64_t frames)
     muted = true;
     m68k_pulse_reset();
     muted = false;
+    if (resume_pc) {
+        regs_from_engine();
+        m68k_set_reg(M68K_REG_PC, resume_pc);
+    }
     sample_pads(0);
     uint64_t mclk_done = 0, cycles_done = 0;
     for (uint64_t frame = 0; pending_action != ACT_RETURNED; frame++) {
