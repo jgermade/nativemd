@@ -20,6 +20,10 @@ void nmd_trace_poll_end(void)   { poll_active = false; poll_have_last = false; }
 void nmd_trace_open(FILE *f) { trace_file = f; }
 bool nmd_trace_enabled(void) { return trace_file != NULL; }
 
+static uint32_t c_stack_top;
+void     nmd_trace_set_c_stack(uint32_t top) { c_stack_top = top & 0xFFFFFF; }
+uint32_t nmd_trace_c_stack(void) { return c_stack_top; }
+
 void nmd_trace_access(nmd_trace_bus bus, bool write, unsigned bits, uint32_t addr, uint32_t value)
 {
     if (!trace_file) return;

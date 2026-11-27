@@ -106,7 +106,7 @@ static const nmd_game no_game = { .name = "oracle" };
 /* volatile: modified between setjmp and a possible longjmp */
 static bool run_oracle(const suite *s, const char *state, run *out)
 {
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = s->rom_writes };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = s->rom_writes, .no_render = true };
     FILE *volatile mem = NULL;
     if (setjmp(fatal_jmp)) {
         nmd_trace_open(NULL);
@@ -135,7 +135,7 @@ static bool run_oracle(const suite *s, const char *state, run *out)
 
 static bool run_candidate(const suite *s, const char *state, const run *expected, run *out)
 {
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = s->rom_writes };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .rom_writes = s->rom_writes, .no_render = true };
     FILE *volatile mem = NULL;
     if (setjmp(fatal_jmp)) {
         nmd_trace_open(NULL);
@@ -292,7 +292,7 @@ int nmd_suite_main(int argc, char **argv, const nmd_game *game)
     s.rom = rom;
 
     /* Symbols and the default stack range need a machine: use a throwaway one. */
-    nmd_config cfg = { .video = NMD_VIDEO_NTSC };
+    nmd_config cfg = { .video = NMD_VIDEO_NTSC, .no_render = true };
     if (!nmd_init(&cfg, game, rom, s.rom_size)) return 2;
     for (int i = 0; i < s.nsyms; i++)
         if (!oracle_load_syms(s.syms[i])) { perror(s.syms[i]); return 2; }

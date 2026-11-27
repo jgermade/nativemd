@@ -70,6 +70,11 @@ validated separately (own test ROMs, other emulators, MiSTer cores).
   PC-relative reads are. The vector fetch of an interrupt and accesses to the stack range
   (default: the 1 KB below the initial SSP, `--stack`) are dropped, because the C does not
   reproduce exception frames, `JSR`/`RTS` traffic or register saves.
+  `nmd-hybrid` applies the same window to the C's own accesses (`nmd_trace_set_c_stack`:
+  `[A7 - 4, initial SSP)`, A7 from `M68K`), so original code and C that write over the
+  stack in use (Sonic 1's boot clears all of RAM) give the same trace. The hybrid handler
+  runs the reset routine without a sentinel return address (it never returns), A7 at the
+  initial SSP as on hardware.
 - **Idle loop** (`--idle LABEL`): repeated identical reads inside the declared polling
   loop are collapsed, matching the collapsing of `wait_until` reads on the C side.
 - **Corrections to Musashi**: `CLR` to memory performs its read cycle (Musashi omits it;
@@ -148,9 +153,42 @@ So a game can start with no C at all and gain C one routine at a time; the hello
 with only `HInt` in C, and with `HInt` + `ReadPad` (called by `BSR` from ASM `VInt`), and
 must match the full-oracle trace and state.
 
+Screenshots: `--screenshot N:FILE.png` (repeatable) on `nmd-hybrid` and every game runner
+built on `nmd_hybrid_main` writes the picture at the end of frame N (1-based, as `--frames`
+counts) as a PNG (`harness/png.c`: no dependencies, uncompressed). The picture comes from
+the engine's renderer (`src/render.c`, milestone 4), drawn line by line before each line's
+HINT. Without `--screenshot` the tools run with `no_render` (headless, as fast as before);
+the suites and `nmd-oracle` always do. A run with C and the same run without C give
+identical pictures when their traces match.
+
 Musashi does not model the 68000's bus-cycle details beyond this (prefetch, exact
 `MOVE.L` half order, `MOVEM` order). Those stay "to verify" in the contract and need other
 references (hardware, FX68K).
+
+`--native` (nmd-hybrid, the game's hybrid and play tools): no oracle. The engine runs the
+game alone and an address without C is a fatal error, as in a finished port; a run that
+gets through shows that every routine it reached has C.
+
+## Playing
+
+`nmd_play_main()` (`harness/play.c`) is the hybrid runner with the desktop host
+(`host/sdl`, SDL2): a window with the renderer's picture, keyboard and game controllers as
+pad 1, frames paced at 59.92 Hz or 49.70 Hz by `--region jp|us|eu` (Japan and America at
+60 Hz, Europe at 50 Hz; `us` by default; the region also sets the version register).
+VSync is on by default (`--no-vsync`, key V): with the display within 1.5 % of the game's
+rate it paces the game, otherwise the clock does and VSync only avoids tearing. The frame
+rate reached is in the window title, with the most the machine could run (emulation and
+drawing time per frame, waits excluded; also printed at exit). With Caps Lock on, a HUD
+drawn at the window's resolution over the picture (Inter, antialiased with stb_truetype;
+both in `third_party/`, the font embedded at build time) shows both, the region and rate, VSync,
+the display's refresh, pause / fast forward. Built only when CMake
+finds SDL2.
+`nmd-play ROM --idle START:END` plays a ROM with no C at all; a game's own runner passes its
+routine table and idle loop (the Sonic 1 client's `s1-play`). Keys: arrows, A / S / D =
+A / B / C, Z / X / C = X / Y / Z (games see them once `io.c` has the 6-button protocol),
+Enter = Start, Alt+Enter (Cmd+Enter on macOS) = fullscreen, P = pause, Tab (held) = fast
+forward, Caps Lock = HUD, V = VSync, Esc = quit. No sound until the Z80 and sound chips
+exist (milestones 5-6).
 
 ## Reference emulators
 

@@ -72,5 +72,7 @@ void oracle_install_hybrid(uint64_t max_cycles_per_slice);
 /* "ignore" or "fatal" (the tools' --rom-writes option; nativemd.h, nmd_rom_writes). */
 #include "nativemd/nativemd.h"
 bool oracle_parse_rom_writes(const char *text, nmd_rom_writes *out);
+/* --region: jp (domestic, NTSC 60 Hz), us (overseas, NTSC), eu (overseas, PAL 50 Hz). */
+bool oracle_parse_region(const char *text, nmd_video *video, bool *overseas);
 
 #endif

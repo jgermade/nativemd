@@ -20,7 +20,6 @@ nmd_machine NMD;
 
 static nmd_coro *game_coro;
 static nmd_fatal_handler fatal_handler;
-static uint32_t framebuffer[320 * 240];
 
 #define GAME_STACK_SIZE (512u * 1024u)
 
@@ -175,10 +174,9 @@ static void run_one_frame(void)
 
     const nmd_host *h = &NMD.cfg.host;
     if (h->present_frame) {
-        /* TODO(milestone 4): rendered image. Until then the buffer is black. */
-        int lines = (NMD.vdp.reg[1] & 0x08) ? 240 : 224;
-        int width = (NMD.vdp.reg[12] & 0x81) ? 320 : 256;
-        h->present_frame(h->user, NMD.frame, framebuffer, width, lines);
+        int width, lines;
+        const uint32_t *fb = nmd_framebuffer(&width, &lines);
+        h->present_frame(h->user, NMD.frame, fb, width, lines);
     }
     NMD.frame++;
     sample_pads();
@@ -228,6 +226,13 @@ void wait_until(bool (*cond)(void *user), void *user)
 /* ------------------------------------------------------------------------ */
 
 uint8_t  *nmd_ram(void)       { return NMD.ram; }
+
+const uint32_t *nmd_framebuffer(int *width, int *height)
+{
+    if (width) *width = (int)vdp_width();
+    if (height) *height = (int)vdp_active_lines();
+    return nmd_fb;
+}
 uint8_t  *nmd_vram(void)      { return NMD.vdp.vram; }
 uint16_t *nmd_cram(void)      { return NMD.vdp.cram; }
 uint16_t *nmd_vsram(void)     { return NMD.vdp.vsram; }

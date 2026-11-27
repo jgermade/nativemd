@@ -2,9 +2,8 @@
  * vdp.c - VDP ports, registers, memories and DMA.
  *
  * Behaviour-exact, not cycle-exact: DMA completes instantly, the FIFO is
- * always reported empty, and rendering is not implemented yet (milestone 4).
- * The frame loop already walks the active lines so HINT handlers run at the
- * right line counts.
+ * always reported empty. The frame loop walks the active lines: each is drawn
+ * (render.c) before its HINT, so HINT handlers' changes show from the next line.
  */
 #include <string.h>
 
@@ -215,7 +214,7 @@ void vdp_begin_frame(void)
 
 bool vdp_line(unsigned line)
 {
-    (void)line; /* TODO(milestone 4): render the line here. */
+    vdp_render_line(line);
     if (V.hint_counter-- == 0) {
         V.hint_counter = V.reg[10];
         return (V.reg[0] & 0x10) != 0;

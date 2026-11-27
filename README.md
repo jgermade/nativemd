@@ -27,6 +27,22 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Or with the Makefile:
+
+```sh
+make install          # system dependencies (apt, dnf, pacman, zypper or Homebrew)
+make build            # engine, tools, tests into build/
+make test             # build, then the tests
+make up               # local development: play the Sonic 1 client against this checkout
+```
+
+`make up INTERNAL=VERSION` picks the client version (the private `nativemd-internal`
+repository, cloned into `internal/`): `main` (default), `latest` (the highest `vX.Y.Z` tag),
+`vX.Y.Z`, or `same` (the branch this checkout is on). The client is built against this
+nativemd tree, not its own submodule, so engine changes show at once; local changes in
+`internal/` are kept (it is then not switched). `UP_ARGS="--scale 4 --fullscreen"` passes
+options to the game. Needs access to the private repository and SDL2.
+
 ## Layout
 
 - `include/nativemd/` — the contract headers game C is written against.
